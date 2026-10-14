@@ -58,6 +58,10 @@ docs/                   screenshots and presentation
   OpenTofu >= 1.11, Ansible, AWS CLI v2, `gcli`
 - AWS credentials for `eu-central-1`
 - Docker Hub account and access token (`podman login docker.io`)
+- `containers.podman` from ansible-galaxy; install with:
+  ```sh
+  ansible-galaxy collection install -r requirements.yml
+  ```
 
 ## How to run
 
