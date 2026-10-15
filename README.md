@@ -34,13 +34,15 @@ flowchart LR
   db -.egress.-> nat
 ```
 
-| Service | Language | Listens | Needs |
+| Service | Language | Listens | Env vars (image default) |
 |---|---|---|---|
-| vote | Python | 80 | `REDIS_HOST` |
-| result | Node.js | 80 (8081 on host) | `PG_HOST`, `PG_USER`, `PG_PASSWORD`, `PG_DATABASE` |
-| worker | .NET | — | `REDIS_HOST`, `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME` |
-| redis | — | 6379 | — |
-| postgres | — | 5432 | — |
+| vote | Python | 80 | `REDIS_HOST` (`redis`), `REDIS_PORT` (`6379`) |
+| result | Node.js | 80 (8081 on host) | `PG_HOST` (`db`), `PG_PORT` (`5432`), `PG_USER`/`PG_PASSWORD`/`PG_DATABASE` (`postgres`) |
+| worker | .NET | none | `REDIS_HOST` (`redis`), `DB_HOST` (`db`), `DB_USERNAME`/`DB_PASSWORD`/`DB_NAME` (`postgres`) |
+| redis | none | 6379 | none |
+| postgres | none | 5432 | `POSTGRES_USER`, `POSTGRES_PASSWORD` |
+
+Defaults match the compose service names. On EC2, override `REDIS_HOST` and `DB_HOST` with the private IPs.
 
 ## Repository layout
 
@@ -61,6 +63,14 @@ docs/                   screenshots and presentation
 - `containers.podman` from ansible-galaxy; install with:
   ```sh
   ansible-galaxy collection install -r requirements.yml
+  ```
+- `pipx`, install with:
+  ```sh
+  sudo apt install pipx
+  ```
+- `ansible` and `checkov`, installable via:
+  ```sh
+  cat requirements.txt | xargs pipx install
   ```
 
 ## How to run
