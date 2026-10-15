@@ -57,7 +57,7 @@ docs/                   screenshots and presentation
 ## Prerequisites
 
 - Debian 13 VM (KVM/libvirt) with: Podman (rootless), `qemu-user-binfmt`,
-  OpenTofu >= 1.11, Ansible, AWS CLI v2, `gcli`
+  OpenTofu >= 1.10, Ansible, AWS CLI v2, `gcli`
 - AWS credentials for `eu-central-1`
 - Docker Hub account and access token (`podman login docker.io`)
 - `containers.podman` from ansible-galaxy; install with:
