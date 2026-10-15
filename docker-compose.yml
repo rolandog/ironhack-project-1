@@ -1,42 +1,38 @@
-# Ironhack note - This file is for running in docker compose with prebuilt images
-# Use these if you're stuck, or if you want to start slowly migrating from external images into your own.
-
+# Own images from Docker Hub, fully qualified for podman.
+# Usage: DOCKERHUB_USER=<user> podman-compose -f docker-compose.rg.yml up -d
 services:
   vote:
-    image: pokfinner/vote:latest
- #  build: ./vote
+    image: docker.io/${DOCKERHUB_USER}/vote:${IMAGE_TAG:-0.1.0}
     depends_on:
       redis:
-        condition: service_healthy 
+        condition: service_healthy
     ports:
       - "8080:80"
     networks:
       - back-tier
 
   result:
-    image: pokfinner/result:latest
- #  build: ./result
+    image: docker.io/${DOCKERHUB_USER}/result:${IMAGE_TAG:-0.1.0}
     depends_on:
       db:
-        condition: service_healthy 
+        condition: service_healthy
     ports:
       - "8081:80"
     networks:
       - back-tier
 
   worker:
- #  build: ./worker
-    image: pokfinner/worker:latest
+    image: docker.io/${DOCKERHUB_USER}/worker:${IMAGE_TAG:-0.1.0}
     depends_on:
       redis:
-        condition: service_healthy 
+        condition: service_healthy
       db:
-        condition: service_healthy 
+        condition: service_healthy
     networks:
       - back-tier
 
   redis:
-    image: redis:alpine
+    image: docker.io/library/redis:alpine
     volumes:
       - "./healthchecks:/healthchecks"
     healthcheck:
@@ -46,7 +42,7 @@ services:
       - back-tier
 
   db:
-    image: postgres:15-alpine
+    image: docker.io/library/postgres:15-alpine
     environment:
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "postgres"
