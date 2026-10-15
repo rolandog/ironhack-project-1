@@ -237,3 +237,86 @@ resource "aws_vpc_security_group_egress_rule" "all" {
   ip_protocol       = "-1"
   tags              = { Name = "rg-${each.key}-egress" }
 }
+
+# ---------- compute ----------
+
+locals {
+  ssh_key     = pathexpand(var.ssh_private_key_path)
+  known_hosts = "${abspath("${path.module}/../ansible")}/known_hosts"
+
+  instances = {
+    frontend = { name = "rg-vm1", subnet = aws_subnet.public.id, public = true }
+    backend  = { name = "rg-vm2", subnet = aws_subnet.backend.id, public = false }
+    db       = { name = "rg-vm3", subnet = aws_subnet.db.id, public = false }
+  }
+}
+
+resource "aws_instance" "vm" {
+  for_each = local.instances
+
+  ami                         = data.aws_ami.debian13.id
+  instance_type               = var.instance_types[each.key]
+  subnet_id                   = each.value.subnet
+  vpc_security_group_ids      = [local.sg_ids[each.key]]
+  key_name                    = var.key_name
+  associate_public_ip_address = each.value.public
+
+  # IMDSv2 only; hop limit 1 keeps containers away from instance credentials
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
+  root_block_device {
+    encrypted   = true
+    volume_type = "gp3"
+    volume_size = var.root_volume_gb
+  }
+
+  tags = {
+    Name = each.value.name
+    Tier = each.key
+  }
+
+  # private hosts need the NAT route before Ansible installs anything
+  depends_on = [aws_route.private_nat]
+}
+
+# hosts.ini is generated, never committed; it holds IPs and the key path
+resource "local_file" "ansible_hosts" {
+  filename        = "${path.module}/../ansible/hosts.ini"
+  file_permission = "0640"
+  content         = <<-EOT
+    [local]
+    localhost ansible_connection=local
+
+    [frontend]
+    rg-vm1 ansible_host=${aws_instance.vm["frontend"].public_ip}
+
+    [backend]
+    rg-vm2 ansible_host=${aws_instance.vm["backend"].private_ip}
+
+    [db]
+    rg-vm3 ansible_host=${aws_instance.vm["db"].private_ip}
+
+    [aws:children]
+    frontend
+    backend
+    db
+
+    [private:children]
+    backend
+    db
+
+    [aws:vars]
+    ansible_user=admin
+    ansible_python_interpreter=/usr/bin/python3
+    ansible_ssh_private_key_file=${local.ssh_key}
+
+    # private hosts are reached through the frontend; a project-local
+    # known_hosts avoids clashes when rebuilt VMs reuse private IPs
+    [private:vars]
+    ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${local.known_hosts} -o ProxyCommand="ssh -i ${local.ssh_key} -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${local.known_hosts} -W %h:%p -q admin@${aws_instance.vm["frontend"].public_ip}"'
+  EOT
+}
