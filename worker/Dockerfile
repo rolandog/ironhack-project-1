@@ -1,16 +1,17 @@
-# Stage 1: Build
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+# Stage 1: Build (runs natively; cross-publishes for the target arch)
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG TARGETARCH
 WORKDIR /src
 
-# Copy the project file and restore dependencies
+# Copy the project file and restore dependencies for the target arch
 COPY Worker.csproj .
-RUN dotnet restore
+RUN dotnet restore -a $TARGETARCH
 
 # Copy the rest of the source code and build
 COPY . .
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish -a $TARGETARCH --no-restore -c Release -o /app/publish
 
-# Stage 2: Runtime
+# Stage 2: Runtime (resolved for the target platform)
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
 WORKDIR /app
 

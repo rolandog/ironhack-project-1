@@ -1,155 +1,104 @@
 <!-- © 2024 | Ironhack -->
+<!-- © 2026 | Rolando Garza -->
 
 ---
 
-# Multi-Stack Voting Application
+# Ironhack Project 1 — Multi-stack voting app on AWS
 
-**Welcome to your DevOps practice project!** This repository hosts a multi-stack voting application composed of several services, each implemented in a different language and technology stack. The goal is to help you gain experience with containerization, orchestration, and running a distributed set of services—both individually and as part of a unified system.
+Polyglot voting application (Python, Node.js, .NET, Redis, PostgreSQL)
+deployed on AWS Graviton instances with OpenTofu and Ansible.
 
-This application, while simple, uses multiple components commonly found in modern distributed architectures, giving you hands-on practice in connecting services, handling containers, and working with basic infrastructure automation.
+> **AI-assistance disclosure:** this project was developed with the help of
+> generative AI (code review, scripts, documentation drafts). All output was
+> reviewed and tested by the author.
 
-## Application Overview
+## Architecture
 
-The voting application includes:
-
-- **Vote (Python)**: A Python Flask-based web application where users can vote between two options.
-- **Redis (in-memory queue)**: Collects incoming votes and temporarily stores them.
-- **Worker (.NET)**: A .NET 7.0-based service that consumes votes from Redis and persists them into a database.
-- **Postgres (Database)**: Stores votes for long-term persistence.
-- **Result (Node.js)**: A Node.js/Express web application that displays the vote counts in real time.
-
-### Why This Setup?
-
-The goal is to introduce you to a variety of languages, tools, and frameworks in one place. This is **not** a perfect production design. Instead, it’s intentionally diverse to help you:
-
-- Work with multiple runtimes and languages (Python, Node.js, .NET).
-- Interact with services like Redis and Postgres.
-- Containerize applications using Docker.
-- Use Docker Compose to orchestrate and manage multiple services together.
-
-By dealing with this “messy” environment, you’ll build real-world problem-solving skills. After this project, you should feel more confident tackling more complex deployments and troubleshooting issues in containerized, multi-service setups.
-
----
-
-## How to Run Each Component
-
-### Running the Vote Service (Python) Locally (No Docker)
-
-1. Ensure you have Python 3.10+ installed.
-2. Navigate to the `vote` directory:
-   ```bash
-   cd vote
-   pip install -r requirements.txt
-   python app.py
-   ```
-   Access the vote interface at [http://localhost:5000](http://localhost:5000).
-
-### Running Redis Locally (No Docker)
-
-1. Install Redis on your system ([https://redis.io/docs/getting-started/](https://redis.io/docs/getting-started/)).
-2. Start Redis:
-   ```bash
-   redis-server
-   ```
-   Redis will be available at `localhost:6379`.
-
-### Running the Worker (C#/.NET) Locally (No Docker)
-
-1. Ensure .NET 7.0 SDK is installed.
-2. Navigate to `worker`:
-   ```bash
-   cd worker
-   dotnet restore
-   dotnet run
-   ```
-   The worker will attempt to connect to Redis and Postgres when available.
-
-### Running Postgres Locally (No Docker)
-
-1. Install Postgres from [https://www.postgresql.org/download/](https://www.postgresql.org/download/).
-2. Start Postgres, note the username and password (default `postgres`/`postgres`):
-   ```bash
-   # On many systems, Postgres runs as a service once installed.
-   ```
-   Postgres will be available at `localhost:5432`.
-
-### Running the Result Service (Node.js) Locally (No Docker)
-
-1. Ensure Node.js 18+ is installed.
-2. Navigate to `result`:
-   ```bash
-   cd result
-   npm install
-   node server.js
-   ```
-   Access the results interface at [http://localhost:4000](http://localhost:4000).
-
-**Note:** To get the entire system working end-to-end (i.e., votes flowing through Redis, processed by the worker, stored in Postgres, and displayed by the result app), you’ll need to ensure each component is running and that connection strings or environment variables point to the correct services.
-
----
-
-## Running the Entire Stack in Docker
-
-### Building and Running Individual Services
-
-You can build each service with Docker and run them individually:
-
-- **Vote (Python)**:
-  ```bash
-  docker build -t myorg/vote:latest ./vote
-  docker run --name vote -p 8080:80 myorg/vote:latest
-  ```
-  Visit [http://localhost:8080](http://localhost:8080).
-
-- **Redis** (official image, no build needed):
-  ```bash
-  docker run --name redis -p 6379:6379 redis:alpine
-  ```
-
-- **Worker (.NET)**:
-  ```bash
-  docker build -t myorg/worker:latest ./worker
-  docker run --name worker myorg/worker:latest
-  ```
-  
-- **Postgres**:
-  ```bash
-  docker run --name db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:15-alpine
-  ```
-
-- **Result (Node.js)**:
-  ```bash
-  docker build -t myorg/result:latest ./result
-  docker run --name result -p 8081:80 myorg/result:latest
-  ```
-  Visit [http://localhost:8081](http://localhost:8081).
-
-### Using Docker Compose
-
-The easiest way to run the entire stack is via Docker Compose. From the project root directory:
-
-```bash
-docker compose up
+```mermaid
+flowchart LR
+  user([Browser]) -->|80 / 8081| fe
+  subgraph vpc[VPC]
+    subgraph pub[Public subnet]
+      fe[rg-vm1 frontend<br/>vote + result<br/>also SSH jump host]
+      nat[NAT gateway]
+    end
+    subgraph priv[Private subnets]
+      be[rg-vm2 backend<br/>redis + worker]
+      db[rg-vm3 database<br/>postgres]
+    end
+  end
+  fe -->|6379| be
+  fe -->|5432| db
+  be -->|5432| db
+  be -.egress.-> nat
+  db -.egress.-> nat
 ```
 
-This will:
+| Service | Language | Listens | Env vars (image default) |
+|---|---|---|---|
+| vote | Python | 80 | `REDIS_HOST` (`redis`), `REDIS_PORT` (`6379`) |
+| result | Node.js | 80 (8081 on host) | `PG_HOST` (`db`), `PG_PORT` (`5432`), `PG_USER`/`PG_PASSWORD`/`PG_DATABASE` (`postgres`) |
+| worker | .NET | none | `REDIS_HOST` (`redis`), `DB_HOST` (`db`), `DB_USERNAME`/`DB_PASSWORD`/`DB_NAME` (`postgres`) |
+| redis | none | 6379 | none |
+| postgres | none | 5432 | `POSTGRES_USER`, `POSTGRES_PASSWORD` |
 
-- Build and run the vote, worker, and result services.
-- Run Redis and Postgres from their official images.
-- Set up networks, volumes, and environment variables so all services can communicate.
+Defaults match the compose service names. On EC2, override `REDIS_HOST` and `DB_HOST` with the private IPs.
 
-Visit [http://localhost:8080](http://localhost:8080) to vote and [http://localhost:8081](http://localhost:8081) to see results.
+## Repository layout
 
----
-
-## Notes on Platforms (arm64 vs amd64)
-
-If you’re on an arm64 machine (e.g., Apple Silicon M1/M2) and encounter issues with images or dependencies that assume amd64, you can use Docker `buildx`:
-
-```bash
-docker buildx build --platform linux/amd64 -t myorg/worker:latest ./worker
+```text
+vote/ result/ worker/   application sources (from the lab repository)
+infra/                  OpenTofu: providers.tf variables.tf main.tf outputs.tf
+ansible/                ansible.cfg hosts.ini (generated) playbook.yml
+scripts/                bootstrap, gcli and cleanup scripts
+docs/                   screenshots and presentation
 ```
 
-This ensures the image is built for the desired platform.
+## Prerequisites
 
----
+- Debian 13 VM (KVM/libvirt) with: Podman (rootless), `qemu-user-binfmt`,
+  OpenTofu >= 1.11, Ansible, AWS CLI v2, `gcli`
+- AWS credentials for `eu-central-1`
+- Docker Hub account and access token (`podman login docker.io`)
+- `containers.podman` from ansible-galaxy; install with:
+  ```sh
+  ansible-galaxy collection install -r requirements.yml
+  ```
+- `pipx`, install with:
+  ```sh
+  sudo apt install pipx
+  ```
+- `ansible` and `checkov`, installable via:
+  ```sh
+  cat requirements.txt | xargs pipx install
+  ```
+
+## How to run
+
+1. **Bootstrap** (key pair, S3 state bucket, `backend.hcl`, `terraform.tfvars`):
+   `scripts/rg-bootstrap.sh`
+2. **Build and publish images** (multi-arch with `podman manifest`): `<see docs/images.md>`
+3. **Provision infrastructure:**
+   `tofu init -backend-config=backend.hcl && tofu plan && tofu apply`
+4. **Deploy with Ansible:** `ansible-playbook playbook.yml`
+5. **Try it:** open `http://<frontend-ip>` (vote) and `http://<frontend-ip>:8081` (result)
+6. **Tear down:** `scripts/rg-cleanup.sh`
+
+## Verification
+
+`<AWS CLI commands and expected output; link to screenshots in docs/>`
+
+## Project workflow
+
+- Gitflow: `main`, `develop`, `feature/*`, `release/*`, `hotfix/*`
+- One GitHub milestone per release (M1 = v0.1.0, M2 = v0.2.0, M3 = v0.3.0, M5 = v1.0.0)
+- Issues carry `status:todo` / `status:doing` / `status:blocked` labels; closed = done
+
+## Cost warning
+
+The NAT gateway bills hourly while it exists.  Run the cleanup script after
+every session and verify nothing billable remains.
+
+## Credits and license
+
+Based on the Ironhack voting-app lab: https://github.com/Pokfinner/ironhack-project-1.  License: Apache-2.0 license.
