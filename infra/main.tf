@@ -252,6 +252,8 @@ locals {
 }
 
 resource "aws_instance" "vm" {
+  #checkov:skip=CKV_AWS_88:frontend is the public web endpoint and SSH jump host; production uses an ALB plus SSM
+  #checkov:skip=CKV2_AWS_41:no AWS API access needed; no role means no credentials to steal
   for_each = local.instances
 
   ami                         = data.aws_ami.debian13.id
@@ -260,6 +262,9 @@ resource "aws_instance" "vm" {
   vpc_security_group_ids      = [local.sg_ids[each.key]]
   key_name                    = var.key_name
   associate_public_ip_address = each.value.public
+
+  ebs_optimized = true # t4g is EBS-optimized by default; makes it explicit
+  monitoring    = true # 1-minute metrics, about $0.003 per instance-hour
 
   # IMDSv2 only; hop limit 1 keeps containers away from instance credentials
   metadata_options {
