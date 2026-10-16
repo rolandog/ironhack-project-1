@@ -1,6 +1,3 @@
-%YAML 1.2
 ---
-# see https://yaml.org/spec/1.2.2/#chapter-10-recommended-schemas
 collections:
-  - name: containers.podman
-...
+  - name: ansible.posix
