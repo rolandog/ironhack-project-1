@@ -8,7 +8,8 @@
 - name: Remember the runtime dir of the user manager
   ansible.builtin.set_fact:
     rg_env:
-      XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd[rg_user][1] }}"
+      XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['getent_passwd'][rg_user][1] }}"
+
 
 # why: file creates missing parents as root, so create each level as the user
 - name: Create the Quadlet directory
