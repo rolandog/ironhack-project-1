@@ -9,6 +9,7 @@ user=${DOCKERHUB_USER:-}
 tag=0.1.0
 platforms=linux/amd64,linux/arm64
 push=no
+build_opts=()
 images=()
 
 usage() {
@@ -20,6 +21,7 @@ Build the vote, result and worker images as multi-arch manifest lists.
   --tag=TAG          version tag (default: $tag); 'latest' is pushed too
   --platforms=LIST   comma-separated platforms (default: $platforms)
   --only=NAME        build only this image; repeatable (vote, result, worker)
+  --no-cache         build without the layer cache and pull fresh bases
   --push             push to docker.io after building
   --help             display this help and exit
   --version          output version information and exit
@@ -37,6 +39,7 @@ for arg; do
     --platforms=*) platforms=${arg#*=} ;;
     --only=*)      images+=("${arg#*=}") ;;
     --push)        push=yes ;;
+    --no-cache)    build_opts=(--no-cache --pull=always) ;;
     *)             usage >&2; die "unrecognized option '$arg'" ;;
   esac
 done
@@ -53,7 +56,7 @@ for name in "${images[@]}"; do
 
   # why: building into an existing manifest list appends duplicate entries
   podman manifest rm "$ref" >/dev/null 2>&1 || true
-  podman build --platform "$platforms" --manifest "$ref" "$name"
+  podman build "${build_opts[@]}" --platform "$platforms" --manifest "$ref" "$name"
 
   if [[ $push == yes ]]; then
     for t in "$tag" latest; do

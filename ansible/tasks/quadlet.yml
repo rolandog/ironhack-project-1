@@ -1,0 +1,51 @@
+---
+# expects: rg_user, rg_quadlets (file name -> content), rg_services (unit names)
+- name: Look up the service user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ rg_user }}"
+
+- name: Remember the runtime dir of the user manager
+  ansible.builtin.set_fact:
+    rg_env:
+      XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['getent_passwd'][rg_user][1] }}"
+
+
+# why: file creates missing parents as root, so create each level as the user
+- name: Create the Quadlet directory
+  ansible.builtin.file:
+    path: "/home/{{ rg_user }}/{{ item }}"
+    state: directory
+    owner: "{{ rg_user }}"
+    group: "{{ rg_user }}"
+    mode: "0750"
+  loop:
+    - .config
+    - .config/containers
+    - .config/containers/systemd
+
+- name: Install the Quadlet files
+  ansible.builtin.copy:
+    dest: "/home/{{ rg_user }}/.config/containers/systemd/{{ item.key }}"
+    content: "{{ item.value }}"
+    owner: "{{ rg_user }}"
+    group: "{{ rg_user }}"
+    mode: "0640"
+  loop: "{{ rg_quadlets | dict2items }}"
+  register: rg_files
+
+- name: Reload the user manager so Quadlet regenerates the units
+  become_user: "{{ rg_user }}"
+  environment: "{{ rg_env }}"
+  ansible.builtin.systemd_service:
+    scope: user
+    daemon_reload: true
+
+- name: Start (or restart after a change) the services
+  become_user: "{{ rg_user }}"
+  environment: "{{ rg_env }}"
+  ansible.builtin.systemd_service:
+    scope: user
+    name: "{{ item }}.service"
+    state: "{{ 'restarted' if rg_files.changed else 'started' }}"
+  loop: "{{ rg_services }}"
