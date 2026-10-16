@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 - 2026-10-16
+## 0.3.1 - 2026-10-16
 ### Added
 - Ansible deployment of the voting app onto the three AWS hosts
   (`ansible/ansible.cfg`, `ansible/site.yml`, `ansible/tasks/quadlet.yml`,
@@ -44,6 +44,10 @@
 - The database password is the upstream default (`postgres`); it is only
   reachable from inside the VPC
 - `rolandog/worker:0.1.0` remains on Docker Hub in its broken state
+
+## 0.3.0 - 2026-10-16
+### Known issues
+- The merge had not taken place before the release was published.
 
 ## 0.2.0 - 2026-10-15
 ### Added
