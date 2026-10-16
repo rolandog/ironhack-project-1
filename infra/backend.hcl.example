@@ -1,0 +1,5 @@
+bucket       = "tf-state-<ACCOUNT_ID>-eu-central-1"
+key          = "ironhack-project-1/terraform.tfstate"
+region       = "eu-central-1"
+encrypt      = true
+use_lockfile = true
