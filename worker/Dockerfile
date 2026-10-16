@@ -1,3 +1,8 @@
+# Stage 0: pull the runtime base for the *target* platform first.
+# why: a stage pinned to $BUILDPLATFORM can make buildah reuse the other
+# architecture's cached layers for the final stage (buildah issue 4742)
+FROM mcr.microsoft.com/dotnet/runtime:8.0 AS target
+
 # Stage 1: Build (runs natively; cross-publishes for the target arch)
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG TARGETARCH
@@ -12,7 +17,7 @@ COPY . .
 RUN dotnet publish -a $TARGETARCH --no-restore -c Release -o /app/publish
 
 # Stage 2: Runtime (resolved for the target platform)
-FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
+FROM target AS runtime
 WORKDIR /app
 
 # Copy the published output from the build stage

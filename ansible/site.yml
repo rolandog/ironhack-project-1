@@ -93,7 +93,7 @@
   vars:
     rg_user: rgapp
     rg_hub: docker.io/rolandog
-    rg_tag: "0.1.0"
+    rg_tag: "0.1.1"
     rg_services: [redis, worker]
     rg_quadlets:
       rg.network: |

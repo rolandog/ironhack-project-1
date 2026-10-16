@@ -33,13 +33,13 @@ cd ansible
 as_rg() {
   local group=$1; shift
   ansible "$group" -b --become-user rgapp -m shell \
-    -a "XDG_RUNTIME_DIR=/run/user/\$(id -u) $*"
+    -a "export XDG_RUNTIME_DIR=/run/user/\$(id -u); $*"
 }
 
 printf '\n== units ==\n'
 as_rg db       'systemctl --user is-active db.service'
-as_rg backend  'systemctl --user is-active redis.service worker.service'
-as_rg frontend 'systemctl --user is-active vote.service result.service'
+as_rg backend  'for u in redis worker; do systemctl --user is-active $u.service || exit 1; done'
+as_rg frontend 'for u in vote result; do systemctl --user is-active $u.service || exit 1; done'
 
 printf '\n== containers ==\n'
 as_rg aws 'podman ps'
@@ -56,5 +56,6 @@ done
 
 printf '\n== end to end: cast a vote, read it from postgres ==\n'
 curl -s -o /dev/null -w 'vote POST -> %{http_code}\n' -d vote=a "http://$ip/"
+as_rg backend "podman exec redis redis-cli llen votes"   # drops to 0 once the worker runs
 sleep 5
 as_rg db "podman exec db psql -U postgres -c 'select vote, count(*) from votes group by vote'"
