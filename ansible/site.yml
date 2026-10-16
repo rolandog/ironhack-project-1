@@ -79,6 +79,7 @@
 
         [Service]
         Restart=always
+        RestartSec=5
         TimeoutStartSec=600
 
         [Install]
@@ -109,6 +110,7 @@
 
         [Service]
         Restart=always
+        RestartSec=5
         TimeoutStartSec=600
 
         [Install]
@@ -127,6 +129,7 @@
 
         [Service]
         Restart=always
+        RestartSec=5
         TimeoutStartSec=600
 
         [Install]
@@ -155,6 +158,7 @@
 
         [Service]
         Restart=always
+        RestartSec=5
         TimeoutStartSec=600
 
         [Install]
@@ -171,6 +175,7 @@
 
         [Service]
         Restart=always
+        RestartSec=5
         TimeoutStartSec=600
 
         [Install]
