@@ -69,7 +69,13 @@ aws s3api put-public-access-block --bucket "$bucket" \
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/${PROGRAM}.XXXXXX")
 my_ip=$(curl -fsS https://checkip.amazonaws.com) || die "cannot detect public ip"
 my_ip=${my_ip//[[:space:]]/}
-printf 'bucket = "%s"\n' "$bucket" >"$tmpdir/backend.hcl"
+cat << EOF > "$tmpdir/backend.hcl"
+bucket       = "$bucket"
+key          = "ironhack-project-1/terraform.tfstate"
+region       = "eu-central-1"
+encrypt      = true
+use_lockfile = true
+EOF
 printf 'admin_cidr = "%s/32"\n' "$my_ip" >"$tmpdir/terraform.tfvars"
 mkdir -p "$TF_DIR"
 mv -f "$tmpdir/backend.hcl" "$tmpdir/terraform.tfvars" "$TF_DIR/"
