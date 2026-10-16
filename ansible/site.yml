@@ -1,0 +1,187 @@
+---
+- name: Base (all AWS hosts)
+  hosts: aws
+  become: true
+  vars:
+    rg_user: rgapp
+    rg_swap: 1G   # t4g.nano has 512 MiB
+  tasks:
+    - name: Install rootless Podman and helpers
+      ansible.builtin.apt:
+        name: [podman, uidmap, passt, netavark, aardvark-dns, dbus-user-session, acl]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Create the unprivileged service user
+      ansible.builtin.user:
+        name: "{{ rg_user }}"
+        shell: /bin/bash
+        create_home: true
+      register: rg_account
+
+    - name: Assert the user has subuid and subgid ranges
+      ansible.builtin.shell: grep -q '^{{ rg_user }}:' /etc/subuid && grep -q '^{{ rg_user }}:' /etc/subgid
+      changed_when: false
+
+    - name: Keep the user manager running without a login (linger)
+      ansible.builtin.command: loginctl enable-linger {{ rg_user }}
+      args:
+        creates: /var/lib/systemd/linger/{{ rg_user }}
+
+    - name: Wait for the user bus
+      ansible.builtin.wait_for:
+        path: "/run/user/{{ rg_account.uid }}/bus"
+        timeout: 30
+
+    - name: Create and format the swap file
+      ansible.builtin.shell: |
+        set -e
+        fallocate -l {{ rg_swap }} /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+      args:
+        creates: /swapfile
+
+    - name: Persist swap in fstab
+      ansible.posix.mount:
+        path: none
+        src: /swapfile
+        fstype: swap
+        opts: sw
+        state: present
+
+    - name: Enable swap now
+      ansible.builtin.command: swapon /swapfile
+      when: ansible_facts['swaptotal_mb'] | int == 0
+
+- name: Database tier (postgres, volume)
+  hosts: db
+  become: true
+  vars:
+    rg_user: rgapp
+    rg_db_password: postgres   # the upstream apps hardcode it; reachable only from the SGs
+    rg_services: [db]
+    rg_quadlets:
+      pgdata.volume: |
+        [Volume]
+      db.container: |
+        [Unit]
+        Description=Postgres (rootless)
+
+        [Container]
+        ContainerName=db
+        Image=docker.io/library/postgres:15-alpine
+        Environment=POSTGRES_USER=postgres
+        Environment=POSTGRES_PASSWORD={{ rg_db_password }}
+        Volume=pgdata.volume:/var/lib/postgresql/data
+        PublishPort=5432:5432
+
+        [Service]
+        Restart=always
+        TimeoutStartSec=600
+
+        [Install]
+        WantedBy=default.target
+  tasks:
+    - ansible.builtin.include_tasks: tasks/quadlet.yml
+
+- name: Backend tier (redis, worker)
+  hosts: backend
+  become: true
+  vars:
+    rg_user: rgapp
+    rg_hub: docker.io/rolandog
+    rg_tag: "0.1.0"
+    rg_services: [redis, worker]
+    rg_quadlets:
+      rg.network: |
+        [Network]
+      redis.container: |
+        [Unit]
+        Description=Redis (rootless)
+
+        [Container]
+        ContainerName=redis
+        Image=docker.io/library/redis:alpine
+        Network=rg.network
+        PublishPort=6379:6379
+
+        [Service]
+        Restart=always
+        TimeoutStartSec=600
+
+        [Install]
+        WantedBy=default.target
+      worker.container: |
+        [Unit]
+        Description=Worker (rootless)
+        After=redis.service
+        Wants=redis.service
+
+        [Container]
+        ContainerName=worker
+        Image={{ rg_hub }}/worker:{{ rg_tag }}
+        Network=rg.network
+        AddHost=db:{{ hostvars['rg-vm3'].ansible_host }}
+
+        [Service]
+        Restart=always
+        TimeoutStartSec=600
+
+        [Install]
+        WantedBy=default.target
+  tasks:
+    - ansible.builtin.include_tasks: tasks/quadlet.yml
+
+- name: Frontend tier (vote, result)
+  hosts: frontend
+  become: true
+  vars:
+    rg_user: rgapp
+    rg_hub: docker.io/rolandog
+    rg_tag: "0.1.0"
+    rg_services: [vote, result]
+    rg_quadlets:
+      vote.container: |
+        [Unit]
+        Description=Vote (rootless)
+
+        [Container]
+        ContainerName=vote
+        Image={{ rg_hub }}/vote:{{ rg_tag }}
+        AddHost=redis:{{ hostvars['rg-vm2'].ansible_host }}
+        PublishPort=80:80
+
+        [Service]
+        Restart=always
+        TimeoutStartSec=600
+
+        [Install]
+        WantedBy=default.target
+      result.container: |
+        [Unit]
+        Description=Result (rootless)
+
+        [Container]
+        ContainerName=result
+        Image={{ rg_hub }}/result:{{ rg_tag }}
+        AddHost=db:{{ hostvars['rg-vm3'].ansible_host }}
+        PublishPort=8081:80
+
+        [Service]
+        Restart=always
+        TimeoutStartSec=600
+
+        [Install]
+        WantedBy=default.target
+  tasks:
+    # why: rootless containers cannot publish port 80 otherwise
+    - name: Allow unprivileged processes to bind port 80 and up
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_unprivileged_port_start
+        value: "80"
+        sysctl_file: /etc/sysctl.d/90-rg-unprivileged-ports.conf
+        reload: true
+
+    - ansible.builtin.include_tasks: tasks/quadlet.yml
