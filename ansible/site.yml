@@ -75,7 +75,7 @@
         Image=docker.io/library/postgres:{{ rg_db_tag }}
         Environment=POSTGRES_USER=postgres
         Environment=POSTGRES_PASSWORD={{ rg_db_password }}
-        Volume=pgdata.volume:/var/lib/postgresql/data
+        Volume=pgdata.volume:/var/lib/postgresql
         PublishPort=5432:5432
 
         [Service]
