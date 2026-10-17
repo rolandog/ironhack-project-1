@@ -145,7 +145,7 @@
   vars:
     rg_user: rgapp
     rg_hub: docker.io/rolandog
-    rg_vote_tag: "0.1.0@sha256:cc4a03206b08f8cbf21da51cadda0c52ed2061f2213e15b7a9efcd37bf76f6b3"
+    rg_vote_tag: "0.1.1@sha256:cc4a03206b08f8cbf21da51cadda0c52ed2061f2213e15b7a9efcd37bf76f6b3"
     rg_result_tag: "1.1.0@sha256:4fee5aec12e43127baacd2bb0fbef246210ce9fcad44cbd71d00f78fc839b413"
     rg_services: [vote, result]
     rg_quadlets:
