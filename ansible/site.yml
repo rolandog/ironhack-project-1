@@ -60,6 +60,7 @@
   become: true
   vars:
     rg_user: rgapp
+    rg_db_tag: 18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     rg_db_password: postgres   # the upstream apps hardcode it; reachable only from the SGs
     rg_services: [db]
     rg_quadlets:
@@ -71,7 +72,7 @@
 
         [Container]
         ContainerName=db
-        Image=docker.io/library/postgres:15-alpine
+        Image=docker.io/library/postgres:{{ rg_db_tag }}
         Environment=POSTGRES_USER=postgres
         Environment=POSTGRES_PASSWORD={{ rg_db_password }}
         Volume=pgdata.volume:/var/lib/postgresql/data
@@ -93,7 +94,8 @@
   vars:
     rg_user: rgapp
     rg_hub: docker.io/rolandog
-    rg_tag: "0.1.1"
+    rg_redis_tag: 8.10.2-alpine3.23@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    rg_worker_tag: "0.1.2@sha256:07bbc233862ae216d5aea8dccb370657a065436d5efb31b830d6e0cddf1f848b"
     rg_services: [redis, worker]
     rg_quadlets:
       rg.network: |
@@ -104,7 +106,7 @@
 
         [Container]
         ContainerName=redis
-        Image=docker.io/library/redis:alpine
+        Image=docker.io/library/redis:{{ rg_redis_tag }}
         Network=rg.network
         PublishPort=6379:6379
 
@@ -123,7 +125,7 @@
 
         [Container]
         ContainerName=worker
-        Image={{ rg_hub }}/worker:{{ rg_tag }}
+        Image={{ rg_hub }}/worker:{{ rg_worker_tag }}
         Network=rg.network
         AddHost=db:{{ hostvars['rg-vm3'].ansible_host }}
 
@@ -143,7 +145,8 @@
   vars:
     rg_user: rgapp
     rg_hub: docker.io/rolandog
-    rg_tag: "0.1.0"
+    rg_vote_tag: "0.1.0@sha256:cc4a03206b08f8cbf21da51cadda0c52ed2061f2213e15b7a9efcd37bf76f6b3"
+    rg_result_tag: "1.1.0@sha256:4fee5aec12e43127baacd2bb0fbef246210ce9fcad44cbd71d00f78fc839b413"
     rg_services: [vote, result]
     rg_quadlets:
       vote.container: |
@@ -152,7 +155,7 @@
 
         [Container]
         ContainerName=vote
-        Image={{ rg_hub }}/vote:{{ rg_tag }}
+        Image={{ rg_hub }}/vote:{{ rg_vote_tag }}
         AddHost=redis:{{ hostvars['rg-vm2'].ansible_host }}
         PublishPort=80:80
 
@@ -169,7 +172,7 @@
 
         [Container]
         ContainerName=result
-        Image={{ rg_hub }}/result:{{ rg_tag }}
+        Image={{ rg_hub }}/result:{{ rg_result_tag }}
         AddHost=db:{{ hostvars['rg-vm3'].ansible_host }}
         PublishPort=8081:80
 
