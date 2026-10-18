@@ -76,13 +76,35 @@ docs/                   screenshots and presentation
 ## How to run
 
 1. **Bootstrap** (key pair, S3 state bucket, `backend.hcl`, `terraform.tfvars`):
-   `scripts/rg-bootstrap.sh`
+   ```sh
+   tofu -chdir=bootstrap init && tofu -chdir=bootstrap apply   # once per account
+   tofu -chdir=infra init -reconfigure -backend-config=backend.hcl
+   ```
 2. **Build and publish images** (multi-arch with `podman manifest`): `<see docs/images.md>`
+   ```sh
+   # something along the lines of:
+   podman build --platform linux/amd64,linux/arm64 --pull=always --no-cache \
+     --manifest docker.io/rolandog/worker:0.1.1 worker/
+   podman manifest push --all docker.io/rolandog/worker:0.1.1
+   ```
 3. **Provision infrastructure:**
-   `tofu init -backend-config=backend.hcl && tofu plan && tofu apply`
-4. **Deploy with Ansible:** `ansible-playbook playbook.yml`
+   ```
+   tofu -chdir=infra plan
+   tofu -chdir=infra apply
+   ```
+4. **Deploy with Ansible:**
+   ```
+   cd ansible
+   ansible-playbook --check site.yml
+   ansible-playbook site.yml
+   ```
 5. **Try it:** open `http://<frontend-ip>` (vote) and `http://<frontend-ip>:8081` (result)
-6. **Tear down:** `scripts/rg-cleanup.sh`
+6. **Tear down:**:
+   ```
+   ./scripts/rg-m2-cleanup.sh
+   ./scripts/rg-m1-cleanup.sh
+   ```
+
 
 ## Verification
 

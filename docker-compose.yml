@@ -2,7 +2,7 @@
 # Usage: DOCKERHUB_USER=<user> podman-compose -f docker-compose.rg.yml up -d
 services:
   vote:
-    image: docker.io/${DOCKERHUB_USER}/vote:${IMAGE_TAG:-0.1.0}
+    image: docker.io/${DOCKERHUB_USER}/vote:${VOTE_IMAGE_TAG:-latest}
     depends_on:
       redis:
         condition: service_healthy
@@ -12,7 +12,7 @@ services:
       - back-tier
 
   result:
-    image: docker.io/${DOCKERHUB_USER}/result:${IMAGE_TAG:-0.1.0}
+    image: docker.io/${DOCKERHUB_USER}/result:${RESULT_IMAGE_TAG:-latest}
     depends_on:
       db:
         condition: service_healthy
@@ -22,7 +22,7 @@ services:
       - back-tier
 
   worker:
-    image: docker.io/${DOCKERHUB_USER}/worker:${IMAGE_TAG:-0.1.0}
+    image: docker.io/${DOCKERHUB_USER}/worker:${WORKER_IMAGE_TAG:-latest}
     depends_on:
       redis:
         condition: service_healthy
@@ -32,7 +32,7 @@ services:
       - back-tier
 
   redis:
-    image: docker.io/library/redis:alpine
+    image: docker.io/library/redis:${REDIS_IMAGE_TAG:-8-alpine}
     volumes:
       - "./healthchecks:/healthchecks"
     healthcheck:
@@ -42,7 +42,7 @@ services:
       - back-tier
 
   db:
-    image: docker.io/library/postgres:15-alpine
+    image: docker.io/library/postgres:${POSTGRES_IMAGE_TAG:-18-alpine}
     environment:
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "postgres"
