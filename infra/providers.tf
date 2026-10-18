@@ -13,7 +13,8 @@ terraform {
     }
   }
 
-  # bucket, key, region, encrypt and use_lockfile come from backend.hcl
+  # bucket, key, region, encrypt and use_lockfile come from backend.hcl;
+  # see backend.hcl.example
   backend "s3" {}
 }
 
