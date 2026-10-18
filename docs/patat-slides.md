@@ -8,114 +8,83 @@ patat:
     right: 2
   speakerNotes:
     file: /tmp/rg-notes.txt
+  # optional Dracula palette; needs a 24-bit colour terminal
+  theme:
+    header: [bold, 'rgb#bd93f9']
+    strong: [bold, 'rgb#ff79c6']
+    emph: [italic, 'rgb#f1fa8c']
+    code: ['rgb#50fa7b']
+    codeBlock: ['rgb#50fa7b']
+    bulletList: ['rgb#8be9fd']
+    borders: ['rgb#6272a4']
+    tableHeader: [bold, 'rgb#bd93f9']
+    tableSeparator: ['rgb#6272a4']
+    linkTarget: ['rgb#8be9fd']
 ...
 
-## Goal
+## Polyglot voting app on AWS
 
-<!-- NOTES [0:00, 30s]
-Introduce: voting app in three languages (Python vote, Node result,
-.NET worker) with Redis and Postgres. Three promises: reproducible,
-free software, secure by default. Say: "I will show tooling, security
-controls, and live evidence from AWS."
+<!-- NOTES [0:00, 10s]
+Greet. One sentence: a voting app written in three languages, deployed
+on AWS with free software only, nothing clicked by hand. Four minutes
+of slides, then a three-minute live demo.
 -->
 
-Voting app: Python + Node.js + .NET, Redis, Postgres
+Rootless Podman, OpenTofu, Ansible on Debian 13
 
-- Reproducible: **OpenTofu** + **Ansible**, nothing clicked by hand
-- Free software end to end: Debian 13, rootless Podman, OpenTofu
-- Security by default, not as an afterthought
+Ironhack DevOps Bootcamp, Week 5
 
-## Workflow
+**rolandog** | release 0.4.0
 
-<!-- NOTES [0:30, 40s]
-Gitflow: main, develop, feature and release branches. Each issue is
-tracked in a milestone with status labels. Commits and release tags are
-signed; 0.1.0 is already tagged. Mention gcli 2.3.0 crashes (double
-free) after creating issues, so my scripts check by listing, not by
-exit code. Honest about a tooling limit = credibility.
+## Project overview
+
+<!-- NOTES [0:10, 25s]
+Walk the arrows: vote writes to Redis, the .NET worker moves votes
+into Postgres, result reads Postgres. Objectives: practise
+infrastructure as code, configuration management, containers, and
+security as a default. Say: "I treated the lab as a small production
+system."
 -->
 
-- **Gitflow**: `main`, `develop`, feature/release branches
-- Milestones M0 to M2, 50+ issues, `status:*` labels
-- Signed commits and signed release tags (`0.1.0` released)
-- `gcli` 2.3.0 crashes -> scripts verify by listing, not exit code
+~~~
+vote (Python) --> Redis --> worker (.NET) --> Postgres
+result (Node.js) <------------------------------+
+~~~
 
-## Images: rootless and multi-arch
+- Objective: deploy and secure it on AWS, reproducibly
+- Practised: IaC, config management, containers, Git workflow
+- Constraint: Free Software end to end, no root containers
 
-<!-- NOTES [1:10, 50s]
-Podman runs without a daemon and without root: a compromised build
-cannot take over the host. One manifest holds amd64 and arm64, so the
-same image runs on my laptop and on Graviton (t4g) instances. The .NET
-worker is cross-published on the build host instead of emulated with
-QEMU, which was the slow path. The registry token is Read & Write only,
-no Delete.
+## Implementation: the pipeline
+
+<!-- NOTES [0:35, 25s]
+Gitflow with signed commits and release tags. Images are built with
+Podman as one manifest holding amd64 and arm64, then pinned by digest
+so a tag can never change under me. OpenTofu builds the network and
+three hosts, Ansible installs rootless units on them.
 -->
 
-~~~~{.bash}
-scripts/rg-build-images.sh --only=vote --push
+~~~
+issue -> feature branch -> signed PR -> release tag
+build (podman, amd64+arm64) -> Docker Hub, pinned by digest
+tofu apply -> VPC + 3 hosts -> ansible -> rootless services
+~~~
 
-podman manifest push --all localhost/rg-vote:0.1.0 \
-  docker://docker.io/rolandog/vote:0.1.0
-~~~~
+- Gitflow, signed commits, signed release tags
+- Multi-arch manifests; deploys pin tag **and** digest
+- Services run as systemd user units (Quadlet), no `sudo`
 
-- Rootless **Podman**, no daemon, no root
-- One manifest: `linux/amd64` + `linux/arm64`
-- Worker cross-published: no QEMU emulation
+## Implementation: infrastructure and security
 
-## Infrastructure
-
-<!-- NOTES [2:00, 40s]
-Draw it in the air: one frontend VM in the public subnet runs vote and
-result and is also the jump host. Backend (Redis plus worker) and db
-(Postgres) have no public IP; they reach the internet only through the
-NAT gateway. Three t4g.nano, Debian 13 arm64. The AMI comes from a data
-source with the official Debian owner ID, never hardcoded. State lives
-in S3 with a native lockfile.
+<!-- NOTES [1:00, 35s]
+Three t4g.nano hosts on Debian 13 arm64. Only the frontend has a
+public IP. Rules reference security groups, not IP ranges: Redis
+accepts only the frontend group. IMDSv2 is required with hop limit 1,
+and root volumes are encrypted. Checkov: 94 passed, 0 failed, 10
+skipped, every skip has a written reason.
 -->
 
-~~~~
-frontend (public)  --->  backend: Redis + worker  --->  db: Postgres
-   vm1                        vm2 (private)               vm3 (private)
-~~~~
-
-- 1 VPC, 3 subnets, NAT gateway for private egress
-- 3 x `t4g.nano`, Debian 13: `debian-13-arm64-20261001-2618`
-- State in S3 with `use_lockfile`
-
-## Security: the instance
-
-<!-- NOTES [2:40, 50s]
-This is the real code from main.tf. Point at three lines. IMDSv2
-required plus hop limit 1: a container on the host cannot reach the
-instance metadata. Encrypted root volume. Private subnets: no public IP
-at all. Then say: "these are not claims, the verify script shows
-HttpTokens = required for all three VMs."
--->
-
-~~~~{.hcl}
-resource "aws_instance" "vm" {
-  metadata_options {
-    http_tokens                 = "required"   # IMDSv2 only
-    http_put_response_hop_limit = 1            # containers can't reach it
-  }
-  root_block_device {
-    encrypted = true
-  }
-  associate_public_ip_address = each.value.public  # frontend only
-}
-~~~~
-
-## Security: network rules
-
-<!-- NOTES [3:30, 50s]
-Key idea: rules reference security groups, not IP ranges. Redis accepts
-traffic only from the frontend SG; Postgres only from backend and
-frontend SGs. If an IP changes, the rule still holds. SSH from the
-internet only from my own /32, only to the frontend. Rules are separate
-resources, not inline, so diffs stay clean.
--->
-
-~~~~{.hcl}
+~~~{.hcl}
 resource "aws_vpc_security_group_ingress_rule" "backend_redis" {
   security_group_id            = aws_security_group.backend.id
   referenced_security_group_id = aws_security_group.frontend.id
@@ -123,67 +92,161 @@ resource "aws_vpc_security_group_ingress_rule" "backend_redis" {
   from_port   = 6379
   to_port     = 6379
 }
-~~~~
+~~~
 
-- 80, 8081: internet. 22: admin `/32` -> frontend only
-- 6379: frontend SG. 5432: backend SG + frontend SG
-- Default security group locked: no rules
+- Private tiers: no public IP, SG references only, no CIDR
+- IMDSv2 required, encrypted volumes, SSH from admin `/32` only
+- Checkov: **94 passed / 0 failed / 10 skipped**
 
-## Static analysis: checkov
+## Challenges and solutions
 
-<!-- NOTES [4:20, 60s]
-I scanned the code with checkov. Fixed what was free: default security
-group, EBS optimized, detailed monitoring. What I accepted, I accepted in
-writing: the skip sits in the resource and the reason is printed in the
-scan output. Say the real numbers: Passed N, Failed 0, Skipped N. Two
-skips are a checkov false positive on SG references. Production next
-step: ALB + SSM and VPC flow logs.
+<!-- NOTES [1:35, 30s]
+Pick two rows and say them out loud; the rest are on the slide.
+Postgres: a floating tag moved to version 18 and the unit restarted
+463 times. Dependabot: 21 alerts, all npm in result. Everything is
+now pinned and verified by a script that casts a real vote.
 -->
 
-~~~~{.hcl}
-resource "aws_instance" "vm" {
-  #checkov:skip=CKV_AWS_88:frontend is the public web endpoint and jump host
-  #checkov:skip=CKV2_AWS_41:no role = no credentials to steal
-  ...
-}
-~~~~
+| Challenge | Solution |
+|---|---|
+| 512 MiB hosts | swap + memory check in the verify script |
+| Floating tag jumped to Postgres 18: 463 restarts | pin tag + digest; volume at `/var/lib/postgresql` |
+| .NET 8 app on .NET 10 runtime | retarget to `net10.0` |
+| 21 Dependabot alerts (1 critical) | lockfile, `overrides`, Node 24: audit = 0 |
+| Silent restart loops | verify script: units active + end-to-end vote |
 
-~~~~{.bash}
+## Major obstacle: `Exec format error`
+
+<!-- NOTES [2:05, 40s]
+The worker image for arm64 contained amd64 binaries, because the
+build reused cached layers from the other platform. It started, died,
+and systemd restarted it forever. Fix: multi-stage targets, no-cache
+builds with fresh bases, and an ELF check before every push: b7 00 is
+arm64, 3e 00 is amd64. In hindsight: write the check on day one and
+never reuse a tag.
+-->
+
+~~~{.bash}
+for p in amd64 arm64; do
+  podman run --rm --platform "linux/$p" --entrypoint sh IMAGE \
+    -c 'od -An -tx1 -j18 -N2 "$(readlink -f "$(command -v dotnet)")"'
+done   # expect amd64: 3e 00   arm64: b7 00
+~~~
+
+- Cause: build cache reused across platforms
+- Fix: multi-stage target + `--no-cache --pull=always` + ELF check
+- Hindsight: verify before push, pin by digest from day one
+
+## Tools and technologies
+
+<!-- NOTES [2:45, 25s]
+Why, not what. Debian and Podman because no daemon and no root.
+OpenTofu because it is Free Software with native S3 locking. Ansible
+because the hosts are tiny and agentless is cheap. Checkov and
+Dependabot are the security feedback loop.
+-->
+
+| Tool | Why |
+|---|---|
+| Debian 13, rootless Podman | Free Software, no daemon, no root |
+| OpenTofu + S3 `use_lockfile` | reproducible infra, no DynamoDB |
+| Ansible | agentless, idempotent config |
+| Checkov, Dependabot, `npm audit` | security gates |
+| GPG signing, `gcli`, Gitflow | traceable history |
+
+## Project management
+
+<!-- NOTES [3:10, 20s]
+Solo project, run like a team: every task is an issue with a status
+label in a milestone. 43 of 53 issues closed, none blocked. What
+worked: small milestones and one release per milestone. To improve:
+the hardening milestone had no release issue, and one closed issue
+lacked its done label.
+-->
+
+- Solo, run as a Kanban board: `status:*` labels, 7 milestones
+- 53 issues: **43 closed**, 6 doing, 4 todo, 0 blocked
+- Released 0.1.0 to 0.3.0; 0.4.0 is the hardening release
+- Backlog (M7): bastion host, ALB, CloudWatch, run without containers
+
+## Conclusion: objectives met
+
+<!-- NOTES [3:30, 15s]
+Say yes to each line. Reproducible: teardown and rebuild worked
+twice. Free software: Debian, Podman, OpenTofu. Secure: audit 0,
+Checkov 0 failed.
+-->
+
+- Reproducible: full teardown and rebuild from code
+- Free Software and rootless: no root containers
+- Secure: `npm audit` 0, Checkov 0 failed, SG references only
+
+## Insights and open questions
+
+<!-- NOTES [3:45, 15s]
+Surprise: most failures came from tags that moved, not from my code.
+Honest gaps: I did not build a bastion or ALB, and I discarded the
+Postgres 15 data instead of learning pg_upgrade. Invite questions.
+-->
+
+- Surprise: moving tags broke more than my own code
+- Not done: bastion, ALB, `pg_upgrade` (data was recreated)
+- Open: how to wire the `.env.example` pins into compose
+
+## Demo 1: vote
+
+<!-- NOTES [4:00, 60s]
+Browser, two tabs. Open vote, cast a vote, switch to result on port
+8081 and show the count change. Say which host serves it: only the
+frontend is public. If the page is slow, go to the next step and
+come back.
+-->
+
+- Tab 1: vote page (port 80), cast a vote
+- Tab 2: result page (port 8081), count changes
+
+## Demo 2: verify script
+
+<!-- NOTES [5:00, 60s]
+Second terminal, output already on screen. Point at: all units
+active, image digests match the pins, HTTP 200 on both ports, and the
+last section: a vote posted and read back from Postgres. Do NOT wait
+for the command to run live.
+-->
+
+~~~{.bash}
+scripts/rg-m3-verify.sh
+~~~
+
+- Units `active` on all 3 hosts, images pinned by digest
+- End to end: vote POST -> row in Postgres
+
+## Demo 3: security evidence
+
+<!-- NOTES [6:00, 60s]
+Show three outputs: dependency versions inside the running result
+container, the Checkov summary, and the security-group table. Hide the
+admin /32. Close with: "the claims on my slides are all in this
+terminal."
+-->
+
+~~~{.bash}
+podman exec result node -p ...   # proxy-addr, ws, qs versions
 checkov -d infra --framework terraform --compact --quiet
-~~~~
+~~~
 
-- Passed N / Failed 0 / Skipped N: every skip has a reason
+- Runtime versions = patched ones
+- Checkov: 0 failed; private tiers have no public IP
 
-## Live evidence
+## Thank you
 
-<!-- NOTES [5:20, 60s]
-Switch to the second terminal with the verify output (already run).
-Point at: NAT available; three instances running, arm64, t4g.nano;
-backend and db PublicIp None; HttpTokens required; state object in S3.
-Do NOT wait for the command to run live. Hide the admin /32 if you
-show the raw security-group table.
+<!-- NOTES [7:00, 10s]
+Thank the class and teachers. Name the repo. Then questions. After
+the talk, run the cleanup scripts: the NAT gateway bills per hour.
 -->
 
-~~~~{.bash}
-scripts/rg-m2-verify.sh
-~~~~
+**Polyglot voting app on AWS**
 
-- NAT `available`, 3 instances `running`, `arm64`, `t4g.nano`
-- Backend and db: public IP `None`
-- Instances: `HttpTokens = required`
-- State object in S3
-
-## Next steps
-
-<!-- NOTES [6:20, 40s]
-Ansible next: containers on the three hosts through the jump host.
-Production hardening: ALB + SSM instead of public SSH, VPC flow logs.
-After the talk run scripts/rg-m2-cleanup.sh: the NAT gateway bills per
-hour. End with questions.
--->
-
-- Ansible (M3): containers on the 3 hosts, via the jump host
-- Production: ALB + SSM instead of public SSH, VPC flow logs
-- Teardown: `scripts/rg-m2-cleanup.sh` (NAT gateway bills hourly)
+rolandog | `github.com/rolandog/ironhack-project-1`
 
 **Questions?**
