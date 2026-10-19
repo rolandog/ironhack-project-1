@@ -47,7 +47,7 @@ services:
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "postgres"
     volumes:
-      - "db-data:/var/lib/postgresql/data"
+      - "db-data:/var/lib/postgresql"
       - "./healthchecks:/healthchecks"
     healthcheck:
       test: /healthchecks/postgres.sh
