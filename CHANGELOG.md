@@ -1,6 +1,29 @@
 # Changelog
 
-## 0.4.0 - 2026-10-18
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.0.0] - 2026-10-24
+### Added
+- `scripts/rg-code-scanning.sh` lists CodeQL alerts grouped by rule and can
+  file one issue per rule; it fails on API errors instead of reporting no alerts
+
+### Changed
+- Updated the patat presentation slides (`docs/patat-slides.md`)
+
+### Security
+- Five CodeQL alerts are open and tracked as issues #64 to #68; fixes are
+  planned for 1.x, after the upstream changes are merged
+
+## [0.4.1] - 2026-10-19
+### Fixed
+- Correct the Postgres data path for Postgres 18 compatibility
+
+## [0.4.0] - 2026-10-18
 ### Added
 - `bootstrap/` OpenTofu folder (local state) that manages the S3 state bucket
   `tf-state-<ACCOUNT_ID>-eu-central-1`: versioning, SSE-S3 encryption, public
@@ -93,7 +116,7 @@
 - The frontend is still the SSH jump host; an individual bastion (#43) is
   moved to the backlog
 
-## 0.3.1 - 2026-10-16
+## [0.3.1] - 2026-10-16
 ### Added
 - Ansible deployment of the voting app onto the three AWS hosts
   (`ansible/ansible.cfg`, `ansible/site.yml`, `ansible/tasks/quadlet.yml`,
@@ -138,11 +161,11 @@
   reachable from inside the VPC
 - `rolandog/worker:0.1.0` remains on Docker Hub in its broken state
 
-## 0.3.0 - 2026-10-16
+## [0.3.0] - 2026-10-16
 ### Known issues
 - The merge had not taken place before the release was published.
 
-## 0.2.0 - 2026-10-15
+## [0.2.0] - 2026-10-15
 ### Added
 - OpenTofu infrastructure: VPC, 3 subnets, NAT gateway, 3 security groups
   with separate SG-to-SG rule resources
@@ -152,9 +175,18 @@
 - `rg-m2-verify.sh` and `rg-m2-cleanup.sh`
 - checkov scan: 94 passed, 0 failed, 10 skipped (each skip documented)
 
-## 0.1.0 - 2026-10-15
+## [0.1.0] - 2026-10-15
 ### Added
 - Multi-arch (linux/amd64, linux/arm64) images for vote, result and worker on Docker Hub
 - Worker Dockerfile cross-publishes for the target arch instead of emulating .NET
 - `docker-compose.rg.yml` running the stack from own images
 - Rootless Podman build scripts, README skeleton, `.gitignore`, project tracking
+
+[Unreleased]: https://github.com/rolandog/ironhack-project-1/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/rolandog/ironhack-project-1/compare/v0.4.1...v1.0.0
+[0.4.1]: https://github.com/rolandog/ironhack-project-1/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/rolandog/ironhack-project-1/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/rolandog/ironhack-project-1/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/rolandog/ironhack-project-1/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/rolandog/ironhack-project-1/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/rolandog/ironhack-project-1/releases/tag/v0.1.0
