@@ -8,11 +8,15 @@ services:
         condition: service_healthy
     ports:
       - "8080:80"
+    environment:
+      VOTING_MODE: ${VOTING_MODE:-every-click}
     networks:
       - back-tier
 
   result:
     image: docker.io/${DOCKERHUB_USER}/result:${RESULT_IMAGE_TAG:-latest}
+    environment:
+      PG_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in a .env file next to docker-compose.yml}
     depends_on:
       db:
         condition: service_healthy
@@ -23,6 +27,9 @@ services:
 
   worker:
     image: docker.io/${DOCKERHUB_USER}/worker:${WORKER_IMAGE_TAG:-latest}
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in a .env file next to docker-compose.yml}
+      VOTING_MODE: ${VOTING_MODE:-every-click}
     depends_on:
       redis:
         condition: service_healthy
@@ -45,7 +52,7 @@ services:
     image: docker.io/library/postgres:${POSTGRES_IMAGE_TAG:-18-alpine}
     environment:
       POSTGRES_USER: "postgres"
-      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in a .env file next to docker-compose.yml}
     volumes:
       - "db-data:/var/lib/postgresql"
       - "./healthchecks:/healthchecks"

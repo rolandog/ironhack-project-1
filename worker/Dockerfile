@@ -26,9 +26,11 @@ COPY --from=build /app/publish ./
 # Set environment variables (can be overridden at runtime)
 ENV DB_HOST=db
 ENV DB_USERNAME=postgres
-ENV DB_PASSWORD=postgres
 ENV DB_NAME=postgres
 ENV REDIS_HOST=redis
+
+# app, the unprivileged user the .NET image ships
+USER 1654
 
 # Define the entry point
 ENTRYPOINT ["dotnet", "Worker.dll"]

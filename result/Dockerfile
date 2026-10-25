@@ -23,14 +23,12 @@ ARG PORT
 ARG PG_HOST
 ARG PG_PORT
 ARG PG_USER
-ARG PG_PASSWORD
 ARG PG_DATABASE
 
 ENV PORT=${PORT:-80} \
     PG_HOST=${PG_HOST:-db} \
     PG_PORT=${PG_PORT:-5432} \
     PG_USER=${PG_USER:-postgres} \
-    PG_PASSWORD=${PG_PASSWORD:-postgres} \
     PG_DATABASE=${PG_DATABASE:-postgres}
 
 # Expose the app's port (defaults to 80 if not overridden)
@@ -40,11 +38,15 @@ EXPOSE $PORT
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "server.js"]
 
-# local development only: docker build --target dev
+# local development only: podman build --target=dev
 FROM base AS dev
 RUN npm install -g nodemon --ignore-scripts
+# node, the unprivileged user the Node image ships (UID 1000)
+USER 1000
 CMD ["nodemon", "server.js"]
 
 # default target: no extra tooling
 FROM base AS prod
+# node, the unprivileged user the Node image ships (UID 1000)
+USER 1000
 
