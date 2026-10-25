@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-25
+
+### Added
+- `VOTING_MODE` setting for how repeat votes are counted, default `every-click`
+  (upstream, PR #28)
+- `scripts/rg-smoke.sh --pinned` runs the stack from the registry images pinned
+  by digest in `.env.example`, without building
+- `docs/images.md` documents release, verification and pinning of images
+
+### Changed
+- Merged upstream PR #28: worker on .NET 10, vote on Python 3.15 with pinned
+  packages, compose on Postgres 18, NuGet and npm packages updated
+- `scripts/rg-build-images.sh` 2.0: `--tag` is required and must be SemVer, an
+  existing registry tag is never overwritten, `latest` moves only with
+  `--latest`, `--verify` checks platforms and ELF headers, and the registry
+  digest is printed as a pin line
+- `docker-compose.yml`: image tags are mandatory (`${VAR:?}`), no floating defaults
+- Images pinned by registry index digest: vote 0.2.0, worker 0.2.0, result 1.2.1;
+  base images bumped (node 24.22.1, python 3.15.1, dotnet 10.0.13 runtime digest)
+- `DB_PASSWORD` is now required, must be set before deploying, and is listed in
+  `.env.example.`
+
+### Removed
+- Tracked build output and `.DS_Store`; a `.gitignore` now covers them
+
+### Fixed
+- vote posts votes and loads its stylesheet under the `/vote` ingress path
+- worker survives Postgres and Redis restarts; result keeps polling through a
+  database restart
+- vote loads jQuery over https with an integrity hash
+- Vote and result bind port 80 as non-root through
+  `net.ipv4.ip_unprivileged_port_start=0` (Quadlet, compose and smoke test)
+- `rolandog/result:1.2.0` on Docker Hub is defective (index with duplicate
+  entries); it is superseded by 1.2.1, do not use it
+
+### Security
+- vote, result and worker images run as unprivileged users (uids 10001, 1000
+  and 1654)
+- Compose requires the database password, and it is kept out of the startup logs
+- `result`: `body-parser` 2.3.0 to 2.4.0, fixing CVE-2026-111181 (denial of
+  service through compressed request bodies, CVSS 7.5, affects 2.0.0 up to
+  2.3.x); installed with a one-off `--min-release-age-exclude`, the
+  `min-release-age=18` policy is unchanged
+- The database password is no longer in git; services read it from an
+  environment file created outside the repository
+
 ## [1.0.0] - 2026-10-24
 ### Added
 - `scripts/rg-code-scanning.sh` lists CodeQL alerts grouped by rule and can
@@ -182,7 +228,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docker-compose.rg.yml` running the stack from own images
 - Rootless Podman build scripts, README skeleton, `.gitignore`, project tracking
 
-[Unreleased]: https://github.com/rolandog/ironhack-project-1/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/rolandog/ironhack-project-1/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/rolandog/ironhack-project-1/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/rolandog/ironhack-project-1/compare/v0.4.1...v1.0.0
 [0.4.1]: https://github.com/rolandog/ironhack-project-1/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/rolandog/ironhack-project-1/compare/v0.3.1...v0.4.0

@@ -1,0 +1,5 @@
+---
+# secrets come from the controller environment, never from git
+rg_db_password: "{{ lookup('ansible.builtin.env', 'RG_DB_PASSWORD') }}"
+rg_voting_mode: "{{ lookup('ansible.builtin.env', 'VOTING_MODE') | default('every-click', true) }}"
+rg_env_file: "/home/{{ rg_user }}/.config/rg/app.env"

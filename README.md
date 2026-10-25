@@ -36,13 +36,27 @@ flowchart LR
 
 | Service | Language | Listens | Env vars (image default) |
 |---|---|---|---|
-| vote | Python | 80 | `REDIS_HOST` (`redis`), `REDIS_PORT` (`6379`) |
-| result | Node.js | 80 (8081 on host) | `PG_HOST` (`db`), `PG_PORT` (`5432`), `PG_USER`/`PG_PASSWORD`/`PG_DATABASE` (`postgres`) |
-| worker | .NET | none | `REDIS_HOST` (`redis`), `DB_HOST` (`db`), `DB_USERNAME`/`DB_PASSWORD`/`DB_NAME` (`postgres`) |
+| vote | Python | 80 | `REDIS_HOST` (`redis`), `REDIS_PORT` (`6379`), `VOTING_MODE` (`every-click` or `one-per-voter`) |
+| result | Node.js | 80 (8081 on host) | `PG_HOST` (`db`), `PG_PORT` (`5432`), `PG_USER`/`PG_DATABASE` (`postgres`), `PG_PASSWORD` (no image default; the code falls back to `postgres`) |
+| worker | .NET | none | `REDIS_HOST` (`redis`), `DB_HOST` (`db`), `DB_USERNAME`/`DB_NAME` (`postgres`), `DB_PASSWORD` (no image default; the code falls back to `postgres`), `VOTING_MODE` (`every-click`) |
 | redis | none | 6379 | none |
-| postgres | none | 5432 | `POSTGRES_USER`, `POSTGRES_PASSWORD` |
+| postgres | none | 5432 | `POSTGRES_USER`, `POSTGRES_PASSWORD` (required by the image) |
 
 Defaults match the compose service names. On EC2, override `REDIS_HOST` and `DB_HOST` with the private IPs.
+
+**Database password.** No password is stored in git. Create one outside the
+repository; use hex, because `result` builds a connection URL from it:
+
+```sh
+install -d -m 700 ~/.config/rg
+[ -e ~/.config/rg/p2.env ] || { umask 077; printf 'RG_DB_PASSWORD=%s\n' "$(openssl rand -hex 24)" >~/.config/rg/p2.env; }
+set -a; . ~/.config/rg/p2.env; set +a
+```
+
+Ansible reads `RG_DB_PASSWORD` and writes it to a 0600 file on each host.
+`podman compose` reads `DB_PASSWORD` (for example `DB_PASSWORD=$RG_DB_PASSWORD`).
+Postgres applies the password only when it first creates its data directory,
+so change it only together with a fresh data volume.
 
 ## Repository layout
 
@@ -80,13 +94,13 @@ docs/                   screenshots and presentation
    tofu -chdir=bootstrap init && tofu -chdir=bootstrap apply   # once per account
    tofu -chdir=infra init -reconfigure -backend-config=backend.hcl
    ```
-2. **Build and publish images** (multi-arch with `podman manifest`): `<see docs/images.md>`
+2. **Build, publish and verify images** (multi-arch with `podman manifest`; see [docs/images.md](docs/images.md)):
    ```sh
-   # something along the lines of:
-   podman build --platform linux/amd64,linux/arm64 --pull=always --no-cache \
-     --manifest docker.io/rolandog/worker:0.1.1 worker/
-   podman manifest push --all docker.io/rolandog/worker:0.1.1
+   scripts/rg-build-images.sh --user=<hub-user> --tag=X.Y.Z --push
    ```
+   The script refuses to overwrite an existing tag, checks both platforms and
+   prints the `*_IMAGE_TAG=tag@sha256:...` lines to paste into `.env.example`,
+   `.env` and `ansible/site.yml`.
 3. **Provision infrastructure:**
    ```
    tofu -chdir=infra plan
