@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-25
+
 ### Added
 - `VOTING_MODE` setting for how repeat votes are counted, default `every-click`
   (upstream, PR #28)
@@ -24,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docker-compose.yml`: image tags are mandatory (`${VAR:?}`), no floating defaults
 - Images pinned by registry index digest: vote 0.2.0, worker 0.2.0, result 1.2.1;
   base images bumped (node 24.22.1, python 3.15.1, dotnet 10.0.13 runtime digest)
+- `DB_PASSWORD` is now required, must be set before deploying, and is listed in
+  `.env.example.`
 
 ### Removed
 - Tracked build output and `.DS_Store`; a `.gitignore` now covers them
@@ -224,7 +228,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docker-compose.rg.yml` running the stack from own images
 - Rootless Podman build scripts, README skeleton, `.gitignore`, project tracking
 
-[Unreleased]: https://github.com/rolandog/ironhack-project-1/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/rolandog/ironhack-project-1/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/rolandog/ironhack-project-1/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/rolandog/ironhack-project-1/compare/v0.4.1...v1.0.0
 [0.4.1]: https://github.com/rolandog/ironhack-project-1/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/rolandog/ironhack-project-1/compare/v0.3.1...v0.4.0
