@@ -226,3 +226,4 @@ stage/
 
 ansible/known_hosts
 .external_modules/
+*.svg.tmp

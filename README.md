@@ -14,26 +14,6 @@ deployed on AWS Graviton instances with OpenTofu and Ansible.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  user([Browser]) -->|80 / 8081| fe
-  subgraph vpc[VPC]
-    subgraph pub[Public subnet]
-      fe[rg-vm1 frontend<br/>vote + result<br/>also SSH jump host]
-      nat[NAT gateway]
-    end
-    subgraph priv[Private subnets]
-      be[rg-vm2 backend<br/>redis + worker]
-      db[rg-vm3 database<br/>postgres]
-    end
-  end
-  fe -->|6379| be
-  fe -->|5432| db
-  be -->|5432| db
-  be -.egress.-> nat
-  db -.egress.-> nat
-```
-
 | Service | Language | Listens | Env vars (image default) |
 |---|---|---|---|
 | vote | Python | 80 | `REDIS_HOST` (`redis`), `REDIS_PORT` (`6379`), `VOTING_MODE` (`every-click` or `one-per-voter`) |
@@ -57,6 +37,29 @@ Ansible reads `RG_DB_PASSWORD` and writes it to a 0600 file on each host.
 `podman compose` reads `DB_PASSWORD` (for example `DB_PASSWORD=$RG_DB_PASSWORD`).
 Postgres applies the password only when it first creates its data directory,
 so change it only together with a fresh data volume.
+
+Diagrams follow the [C4 model](https://c4model.com/diagrams). Sources are ASCII art in `docs/diagrams/*.txt`; run `make` to regenerate the SVGs (needs [aasvg](https://www.npmjs.com/package/aasvg)).
+
+### System context
+
+![System context: a voter and an operator use the Voting App, which runs on AWS and pulls images from Docker Hub; GitHub Actions deploys it.](docs/diagrams/c4-01-context.svg)
+
+<details><summary>Key</summary>
+
+![Key for the system context diagram](docs/diagrams/c4-01-context-key.svg)
+
+</details>
+
+### Containers
+
+![Containers: Envoy routes /vote and /result to the vote and result apps; vote writes to redis, the worker moves votes from redis to PostgreSQL, result reads PostgreSQL.](docs/diagrams/c4-02-containers.svg)
+
+<details><summary>Key</summary>
+
+![Key for the container diagram](docs/diagrams/c4-02-containers-key.svg)
+
+</details>
+
 
 ## Repository layout
 

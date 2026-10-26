@@ -1,0 +1,20 @@
+  o
+ /|\    Person (user or operator)
+ / \
+
++----------------------+
+| Software system      |    Our software system
+| (ours)               |
++----------------------+
+
++~~~~~~~~~~~~~~~~~~~~~~+
+| External system      |    External software system
+| (not ours)           |
++~~~~~~~~~~~~~~~~~~~~~~+
+
+
+---------->   Runtime interaction
+
+==========>   Build or deploy-time interaction
+
+Wavy edge = external. Double line = build or deploy time.
