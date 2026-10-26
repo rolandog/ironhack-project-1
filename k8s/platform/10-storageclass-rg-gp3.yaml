@@ -1,0 +1,12 @@
+# k8s/platform/10-storageclass-rg-gp3.yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rg-gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+allowVolumeExpansion: true

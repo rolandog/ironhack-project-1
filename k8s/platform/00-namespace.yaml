@@ -1,0 +1,10 @@
+# k8s/platform/00-namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rg-app
+  labels:
+    app.kubernetes.io/part-of: rg-p2
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
