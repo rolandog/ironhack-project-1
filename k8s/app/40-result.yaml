@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result
+  namespace: rg-app
+  labels:
+    app.kubernetes.io/name: result
+    app.kubernetes.io/part-of: rg-voting-app
+spec:
+  # one replica: Socket.IO long-polling needs sticky sessions with more
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: result
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: result
+        app.kubernetes.io/part-of: rg-voting-app
+    spec:
+      # a Service named redis injects REDIS_PORT=tcp://..., which the apps parse as an int
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: result
+          image: docker.io/rolandog/result:1.2.1@sha256:9b1b551a5642399065139841c859de0f15f675e6141bb0396dd41c27b6490f56
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # the image defaults to 80; 8080 avoids needing a sysctl for uid 1000
+            - name: PORT
+              value: "8080"
+            - name: PG_HOST
+              value: db
+            - name: PG_USER
+              value: postgres
+            - name: PG_DATABASE
+              value: postgres
+            - name: PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rg-db
+                  key: PG_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /result/
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /result/
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: result
+  namespace: rg-app
+  labels:
+    app.kubernetes.io/name: result
+    app.kubernetes.io/part-of: rg-voting-app
+spec:
+  selector:
+    app.kubernetes.io/name: result
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

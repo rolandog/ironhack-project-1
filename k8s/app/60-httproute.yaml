@@ -1,0 +1,68 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: voting-app
+  namespace: rg-app
+  labels:
+    app.kubernetes.io/part-of: rg-voting-app
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: rg-gw
+  hostnames:
+    - app.p2.ih.rolan.dog
+  rules:
+    # / -> /vote/
+    - matches:
+        - path:
+            type: Exact
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /vote/
+            statusCode: 302
+    # the vote app serves at /, so strip the /vote prefix
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /vote
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: vote
+          port: 80
+    # vote's template links /static/... with an absolute path
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /static
+      backendRefs:
+        - name: vote
+          port: 80
+    # result loads its assets by relative URL, so /result needs the trailing slash
+    - matches:
+        - path:
+            type: Exact
+            value: /result
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /result/
+            statusCode: 302
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /result
+      backendRefs:
+        - name: result
+          port: 80
