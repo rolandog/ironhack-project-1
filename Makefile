@@ -7,7 +7,7 @@ SHELL := /bin/bash
 .SUFFIXES:
 
 AASVG      ?= aasvg
-AASVG_OPTS ?= --backdrop --spaces=2
+AASVG_OPTS ?= --backdrop --spaces=2 --style=background-color:\#e7e7e8
 DIAGDIR    := docs/diagrams
 SRC        := $(wildcard $(DIAGDIR)/*.txt)
 SVG        := $(SRC:.txt=.svg)
