@@ -43,7 +43,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /static
+            value: /vote/static
       backendRefs:
         - name: vote
           port: 80
