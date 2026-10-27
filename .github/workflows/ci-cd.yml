@@ -120,3 +120,80 @@ jobs:
         if: always()
         run: |
           [[ -z ${REGISTRY_AUTH_FILE:-} ]] || rm -f -- "$REGISTRY_AUTH_FILE"
+
+  deploy:
+    # the deploy role trusts only refs/heads/main: do not add an environment: here, it changes the sub
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-eks
+      cancel-in-progress: false
+    env:
+      CLUSTER: eks-rolando-p2
+      NAMESPACE: rg-app
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.RG_P2_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install kubectl within one minor of the cluster
+        run: |
+          set -euo pipefail
+          minor=$(aws eks describe-cluster --name "$CLUSTER" --query cluster.version --output text)
+          ver=$(curl -fsSL "https://dl.k8s.io/release/stable-${minor}.txt")
+          printf 'cluster %s, kubectl %s\n' "$minor" "$ver"
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP/bin"
+          curl -fsSLO "https://dl.k8s.io/release/${ver}/bin/linux/amd64/kubectl"
+          curl -fsSL "https://dl.k8s.io/release/${ver}/bin/linux/amd64/kubectl.sha256" -o kubectl.sha256
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+          chmod +x kubectl
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Open the API allow-list for this runner
+        run: scripts/rg-ci-allowlist.sh open
+
+      - name: Roll out the new images
+        env:
+          REGISTRY: ${{ vars.RG_P2_ECR_REGISTRY }}
+          VOTE: ${{ needs.publish.outputs.vote }}
+          RESULT: ${{ needs.publish.outputs.result }}
+          WORKER: ${{ needs.publish.outputs.worker }}
+        run: |
+          set -euo pipefail
+          [[ -n $VOTE && -n $RESULT && -n $WORKER ]] || { echo 'missing image pins'; exit 1; }
+          kubectl version --client
+          aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION" --kubeconfig "$KUBECONFIG"
+          for i in $(seq 1 12); do
+            kubectl -n "$NAMESPACE" get deployments && break
+            [[ $i -lt 12 ]] || exit 1
+            sleep 10
+          done
+          kubectl -n "$NAMESPACE" set image deployment/vote "vote=$REGISTRY/${IMAGE_PREFIX}vote:$VOTE"
+          kubectl -n "$NAMESPACE" set image deployment/result "result=$REGISTRY/${IMAGE_PREFIX}result:$RESULT"
+          kubectl -n "$NAMESPACE" set image deployment/worker "worker=$REGISTRY/${IMAGE_PREFIX}worker:$WORKER"
+          for d in vote result worker; do
+            kubectl -n "$NAMESPACE" rollout status "deployment/$d" --timeout=300s
+          done
+          {
+            echo '### Deployed'
+            echo '```text'
+            kubectl -n "$NAMESPACE" get deployments \
+              -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore the API allow-list
+        if: always()
+        run: scripts/rg-ci-allowlist.sh restore
