@@ -1,5 +1,5 @@
 ---
-title: 'Polyglot voting app on AWS'
+title: 'Voting app on EKS'
 author: 'rolandog'
 patat:
   wrap: true
@@ -8,13 +8,12 @@ patat:
     right: 2
   speakerNotes:
     file: /tmp/rg-notes.txt
-  # optional Dracula palette; needs a 24-bit colour terminal
   theme:
     header: [bold, 'rgb#bd93f9']
     strong: [bold, 'rgb#ff79c6']
     emph: [italic, 'rgb#f1fa8c']
     code: ['rgb#50fa7b']
-    codeBlock: ['rgb#50fa7b']
+    codeBlock: []
     bulletList: ['rgb#8be9fd']
     borders: ['rgb#6272a4']
     tableHeader: [bold, 'rgb#bd93f9']
@@ -22,230 +21,257 @@ patat:
     linkTarget: ['rgb#8be9fd']
 ...
 
-## Polyglot voting app on AWS
+## Voting app on EKS: what changed since Project 1
 
-<!-- NOTES [0:00, 10s]
-Greet. One sentence: a voting app written in three languages, deployed
-on AWS with free software only, nothing clicked by hand. Four minutes
-of slides, then a three-minute live demo.
+<!-- NOTES [0:00, 15s]
+Hi everyone. You know the voting app, so I'll skip it. This is how I got
+it onto Kubernetes with a pipeline: my decisions, where I got stuck, and
+what I want to get better at.
 -->
 
-Rootless Podman, OpenTofu, Ansible on Debian 13
+Project 2: EKS, Gateway API, ECR and GitHub Actions
 
-Ironhack DevOps Bootcamp, Week 5
+Ironhack DevOps Bootcamp
 
-**rolandog** | release 0.4.0
+**rolandog** | release 1.2.0 in progress
 
-## Project overview
+Base: teacher's repo plus upstream PR #28 (Martin)
 
-<!-- NOTES [0:10, 25s]
-Walk the arrows: vote writes to Redis, the .NET worker moves votes
-into Postgres, result reads Postgres. Objectives: practise
-infrastructure as code, configuration management, containers, and
-security as a default. Say: "I treated the lab as a small production
-system."
+## What we did differently
+
+<!-- NOTES [0:15, 39s]
+Project 1 was three Debian hosts and Ansible. This time it's EKS, built
+with OpenTofu. My rule was free software wherever possible: OpenTofu,
+Podman, Envoy Gateway, git-flow. The lab suggested NGINX Ingress, but its
+maintenance ended in March, so I used the Gateway API with Envoy. The
+registry is where I gave ground: ECR instead of Docker Hub, because
+everything else already lives in AWS. Harbor, a CNCF-graduated registry,
+is the free alternative I haven't tried yet. The cluster is destroyed
+every night to save money, so scripted rebuilds matter.
 -->
 
-~~~
-vote (Python) --> Redis --> worker (.NET) --> Postgres
-result (Node.js) <------------------------------+
-~~~
+| | Project 1 | Project 2 |
+|---|---|---|
+| Platform | 3 Debian hosts, Ansible, Quadlet | EKS 1.35, 2 x t4g.medium (arm64), OpenTofu |
+| Entry point | public IP on one host | NLB + Envoy Gateway (Gateway API), Route 53 |
+| Registry | Docker Hub | ECR: immutable tags, scan on push |
+| Delivery | scripts run by hand | GitHub Actions + OIDC, no stored AWS keys |
+| Cost | always on, nano hosts | destroyed nightly, about 20 min to rebuild |
 
-- Objective: deploy and secure it on AWS, reproducibly
-- Practised: IaC, config management, containers, Git workflow
-- Constraint: Free Software end to end, no root containers
+- Envoy Gateway instead of the lab's NGINX Ingress: ingress-nginx was retired in March 2026
 
-## Implementation: the pipeline
+## System context
 
-<!-- NOTES [0:35, 25s]
-Gitflow with signed commits and release tags. Images are built with
-Podman as one manifest holding amd64 and arm64, then pinned by digest
-so a tag can never change under me. OpenTofu builds the network and
-three hosts, Ansible installs rootless units on them.
+<!-- NOTES [0:54, 15s]
+Two changes: Docker Hub became ECR, and GitHub Actions is real now.
+Upfront: AWS and GitHub aren't free software, so FLOSS everywhere isn't
+true here. It holds for my tooling and the workloads in the cluster.
 -->
 
-~~~
-issue -> feature branch -> signed PR -> release tag
-build (podman, amd64+arm64) -> Docker Hub, pinned by digest
-tofu apply -> VPC + 3 hosts -> ansible -> rootless services
-~~~
+```text
+         o    Voter [Person]                                 o    Operator [Person]
+        /|\   Casts votes, views                            /|\   Provisions, deploys
+        / \   live results                                  / \
+         |                                                   ║
+         |  votes, views results                             ║  git push
+         |                                                   ║
+         v                                                   v
++--------------------------------+                  +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+
+| Voting App                     |                  | GitHub Actions                 |
+| [Software System]              |  set image       | [External System]              |
+| Cats vs Dogs poll with         |<=================| Builds, pushes images to ECR,  |
+| live results                   |                  | deploys on main (pending)      |
++--------------------------------+                  +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+
+                  |                                                   ║
+                  |  runs on                                          ║  pushes images
+                  v                                                   v
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+                  +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+
+| AWS: EKS, NLB, EBS, Route 53   |                  | AWS ECR                        |
+| [External System]              |  pulls images    | [External System]              |
+| Managed Kubernetes,            |----------------->| Private image registry,        |
+| load balancer, volumes         |                  | immutable tags, scan on push   |
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+                  +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+
+```
 
-- Gitflow, signed commits, signed release tags
-- Multi-arch manifests; deploys pin tag **and** digest
-- Services run as systemd user units (Quadlet), no `sudo`
+Wavy edge = external system. Double line = build or deploy time.
 
-## Implementation: infrastructure and security
+## Containers in namespace rg-app
 
-<!-- NOTES [1:00, 35s]
-Three t4g.nano hosts on Debian 13 arm64. Only the frontend has a
-public IP. Rules reference security groups, not IP ranges: Redis
-accepts only the frontend group. IMDSv2 is required with hop limit 1,
-and root volumes are encrypted. Checkov: 94 passed, 0 failed, 10
-skipped, every skip has a written reason.
+<!-- NOTES [1:09, 30s]
+Same five services. What's new is the way in: browser, load balancer,
+Envoy, then vote or result. Envoy rewrites /vote to the root, because the
+Flask app serves from there. Postgres sits on an EBS volume, which is why
+teardown deletes volumes explicitly. Redis is the piece I'd like to swap
+for Valkey, the BSD-licensed Linux Foundation fork. I haven't tested it,
+so I can't promise it's a drop-in.
 -->
 
-~~~{.hcl}
-resource "aws_vpc_security_group_ingress_rule" "backend_redis" {
-  security_group_id            = aws_security_group.backend.id
-  referenced_security_group_id = aws_security_group.frontend.id
-  ip_protocol = "tcp"
-  from_port   = 6379
-  to_port     = 6379
-}
-~~~
+```text
+                                              o    Voter [Person]
+                                             /|\   Web browser
+                                             / \
+                                               |  HTTP port 80 via AWS NLB
+                                               v
++==================================================================================================+
+║ Voting App [Software System]   namespace rg-app on EKS 1.35                                      ║
+║                                                                                                  ║
+║         +------------------------------------------------------------------------------+         ║
+║         |▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒|         ║
+║         | Envoy Proxy [Envoy Gateway v1.9.2]                                           |         ║
+║         | HTTPRoutes /vote and /result, behind the AWS NLB                             |         ║
+║         +------------------------------------------------------------------------------+         ║
+║                |  /vote (rewrite to /)             /result, /result/socket.io  |                 ║
+║                v                                                               v                 ║
+║ +--------------------------------+                            +--------------------------------+ ║
+║ | vote                           |                            | result                         | ║
+║ | [Python, Flask, gunicorn]      |                            | [Node.js, Socket.IO]           | ║
+║ | Ballot page, port 80           |                            | Live tally, PORT planned 8080  | ║
+║ | uid 10001                      |                            | uid 1000                       | ║
+║ +--------------------------------+                            +--------------------------------+ ║
+║                |  rpush votes, TCP 6379                 reads votes, TCP 5432  |                 ║
+║                v                                                               v                 ║
+║ +--------------------------------+     +----------------+     +--------------------------------+ ║
+║ | redis                          |     | worker         |     | db                             | ║
+║ +--------------------------------+<----| [.NET 10]      |---->+--------------------------------+ ║
+║ | [Data store: Redis 8.10]       |     | Moves votes    |     | [Data store: PostgreSQL 18]    | ║
+║ | Queue of pending votes         |     | redis -> db    |     | votes table on PVC rg-gp3      | ║
+║ +--------------------------------+     +----------------+     +--------------------------------+ ║
++==================================================================================================+
+```
 
-- Private tiers: no public IP, SG references only, no CIDR
-- IMDSv2 required, encrypted volumes, SSH from admin `/32` only
-- Checkov: **94 passed / 0 failed / 10 skipped**
+## Pipeline: the branch decides
+
+<!-- NOTES [1:39, 39s]
+The branch decides what happens. A pull request only proves the images
+build. A push to develop builds amd64 and arm64 with Podman, checks each
+ELF header, and pushes an immutable tag to ECR. A push to main does the
+same, then deploys. No AWS keys are stored in GitHub: each job assumes an
+IAM role through OIDC. The wrinkle is that the cluster API only allows my
+IP, so the deploy job adds the runner's address and always restores the
+list. Honest status: pushing works; the deploy job has never run.
+-->
+
+```text
+pull request -> build amd64, no push
+develop      -> build amd64+arm64 -> ELF check -> ECR  tag 1.2.0-dev.N (immutable)
+main         -> same, tag 1.2.0 -> deploy job (not yet run):
+                open API allow-list to the runner /32 -> kubectl set image
+                -> rollout status -> restore the allow-list (always)
+auth         -> GitHub OIDC -> one IAM role per job, no stored AWS keys
+```
+
+- Push role: develop and main. Deploy role: main only, Edit on namespace `rg-app`
+- Tags are never reused; the registry digest is verified after every push
+- Images are pinned as `tag@digest`
 
 ## Challenges and solutions
 
-<!-- NOTES [1:35, 30s]
-Pick two rows and say them out loud; the rest are on the slide.
-Postgres: a floating tag moved to version 18 and the unit restarted
-463 times. Dependabot: 21 alerts, all npm in result. Everything is
-now pinned and verified by a script that casts a real vote.
+<!-- NOTES [2:18, 35s]
+Two stories. First, the load balancer: with one Envoy pod and cross-zone
+off, it sent traffic to a zone with no proxy. Two replicas across zones
+fixed that. Second, destroy hung on leftover network interfaces, so
+teardown now deletes the Gateway first, waits, then runs tofu destroy.
+The last row is live right now: Podman prints build progress on stdout,
+and it ended up in the file GitHub reads outputs from. Shell error
+handling is a skill I need to sharpen.
 -->
 
 | Challenge | Solution |
 |---|---|
-| 512 MiB hosts | swap + memory check in the verify script |
-| Floating tag jumped to Postgres 18: 463 restarts | pin tag + digest; volume at `/var/lib/postgresql` |
-| .NET 8 app on .NET 10 runtime | retarget to `net10.0` |
-| 21 Dependabot alerts (1 critical) | lockfile, `overrides`, Node 24: audit = 0 |
-| Silent restart loops | verify script: units active + end-to-end vote |
+| NLB targets unhealthy, intermittent failures | 2 Envoy replicas spread over zones; test each NLB IP |
+| VPC delete hung on leftover load balancer ENIs | `rg-down.sh` deletes the Gateway first, waits, then `tofu destroy` |
+| Hosted runner cannot reach the API (allow-list is my /32) | deploy job opens its own /32 and restores the list |
+| OIDC `sub` claim uses owner and repo IDs on new repos | printed the claim, trust policy uses the IDs |
+| CI output step broken by podman progress lines | keep only pin lines, add `pipefail` (fix pending) |
 
-## Major obstacle: `Exec format error`
+## Requirements: aimed, reached, open
 
-<!-- NOTES [2:05, 40s]
-The worker image for arm64 contained amd64 binaries, because the
-build reused cached layers from the other platform. It started, died,
-and systemd restarted it forever. Fix: multi-stage targets, no-cache
-builds with fresh bases, and an ELF check before every push: b7 00 is
-arm64, 3e 00 is amd64. In hindsight: write the check on day one and
-never reuse a tag.
+<!-- NOTES [2:53, 32s]
+Row by row. Goals one and two, the cluster and the services, are done
+and verified. Goal three has two halves: build and push works on both
+architectures, with a bug in the summary step; deploy from CI is written
+but not run, because the deploy role only trusts main. Hardening is
+partial: non-root images, no database password in git, but security
+contexts are still open. I'd rather show the gaps than hide them.
 -->
 
-~~~{.bash}
-for p in amd64 arm64; do
-  podman run --rm --platform "linux/$p" --entrypoint sh IMAGE \
-    -c 'od -An -tx1 -j18 -N2 "$(readlink -f "$(command -v dotnet)")"'
-done   # expect amd64: 3e 00   arm64: b7 00
-~~~
+| Goal | Aimed for | Status |
+|---|---|---|
+| 1. Secure, scalable EKS | OpenTofu, restricted API, signed commits | **Done**: EKS 1.35, API on my /32 only, checkov 0 failed |
+| 2. Deploy the 5 services | manifests, /vote and /result routes | **Done**: HTTP 200 on both NLB IPs, Postgres on EBS gp3 |
+| 3a. Build and push | multi-arch images to a registry | **Done on develop**: ECR, amd64+arm64, ELF-checked; summary step has a bug |
+| 3b. Deploy from CI | `kubectl` on push to main | **Not yet run**: written, waits for release 1.2.0 |
+| Hardening (#71) | non-root, secrets, securityContext | **Partial**: app images non-root, DB password never in git |
+| Docs | README, C4 diagrams, slides | **Partial**: diagrams done, README open |
 
-- Cause: build cache reused across platforms
-- Fix: multi-stage target + `--no-cache --pull=always` + ELF check
-- Hindsight: verify before push, pin by digest from day one
+## Gitflow: worth it, but cumbersome
 
-## Tools and technologies
-
-<!-- NOTES [2:45, 25s]
-Why, not what. Debian and Podman because no daemon and no root.
-OpenTofu because it is Free Software with native S3 locking. Ansible
-because the hosts are tiny and agentless is cheap. Checkov and
-Dependabot are the security feedback loop.
+<!-- NOTES [3:25, 28s]
+Gitflow has a lot of edge cases. I stacked a branch on an unmerged pull
+request and couldn't push. A branch merged by PR must not also be
+finished with git flow. And I can't test the deploy until a release
+exists. But main stays releasable while the mess happens elsewhere, and
+releases get signed tags. For one person it's ceremony, but a fair trade.
 -->
 
-| Tool | Why |
-|---|---|
-| Debian 13, rootless Podman | Free Software, no daemon, no root |
-| OpenTofu + S3 `use_lockfile` | reproducible infra, no DynamoDB |
-| Ansible | agentless, idempotent config |
-| Checkov, Dependabot, `npm audit` | security gates |
-| GPG signing, `gcli`, Gitflow | traceable history |
+- Good: `main` stays releasable, the mess lives on `feature/*`, releases get signed tags
+- Cumbersome: many edge cases
+  - branch stacked on an unmerged PR: could not push
+  - merged by PR **or** `git flow feature finish`, never both
+  - deploy role trusts `main`: CI deploy cannot be tested before a release
+- Verdict: ceremony for one person, but it protects `main`
 
-## Project management
+## Backlog
 
-<!-- NOTES [3:10, 20s]
-Solo project, run like a team: every task is an issue with a status
-label in a milestone. 43 of 53 issues closed, none blocked. What
-worked: small milestones and one release per milestone. To improve:
-the hardening milestone had no release issue, and one closed issue
-lacked its done label.
+<!-- NOTES [3:53, 22s]
+Next: fix the summary step, cut 1.2.0, run the first CI deploy. Then
+hardening and CodeQL alerts. Known gaps: manifests still pull from Docker
+Hub, the site is plain HTTP, and there's an intermittent timeout on vote
+I'm still investigating. TLS and security contexts are areas I want to
+learn properly.
 -->
 
-- Solo, run as a Kanban board: `status:*` labels, 7 milestones
-- 53 issues: **43 closed**, 6 doing, 4 todo, 0 blocked
-- Released 0.1.0 to 0.3.0; 0.4.0 is the hardening release
-- Backlog (M7): bastion host, ALB, CloudWatch, run without containers
+- Now: fix the publish summary step, release 1.2.0, first CI deploy (#87)
+- Next: #71 hardening (securityContext, secrets), CodeQL alerts #65 to #68, README
+- Gap: manifests still pull from Docker Hub until the ECR digests are pinned
+- Gap: the site is plain HTTP, no TLS on the NLB yet
+- Gap: intermittent `/vote/` timeout (about 1 in 6 in my test, cause open)
 
-## Conclusion: objectives met
+## Demo
 
-<!-- NOTES [3:30, 15s]
-Say yes to each line. Reproducible: teardown and rebuild worked
-twice. Free software: Debian, Podman, OpenTofu. Secure: audit 0,
-Checkov 0 failed.
+<!-- NOTES [4:15, 60s]
+0:00 to 0:20: the terminal already shows rg-demo.sh output, so I don't
+wait for it. Point at: 2 arm64 nodes, 5 workloads Ready, HTTP 200 on
+/vote/ and /result/, newest ECR tag 1.2.0-dev.4, 2 allow-list entries
+(my IPs). Say: the image pins still show Docker Hub, that's the gap on
+the backlog slide.
+0:20 to 0:50: browser, two tabs. Cast a vote, switch to /result/, the
+count changes live. If the vote page hangs, reload once and say it's the
+known timeout.
+0:50 to 1:00: the Actions page: which run is green, which step is still
+red, and that the deploy job is waiting for the release.
 -->
 
-- Reproducible: full teardown and rebuild from code
-- Free Software and rootless: no root containers
-- Secure: `npm audit` 0, Checkov 0 failed, SG references only
+```bash
+scripts/rg-demo.sh
+```
 
-## Insights and open questions
-
-<!-- NOTES [3:45, 15s]
-Surprise: most failures came from tags that moved, not from my code.
-Honest gaps: I did not build a bastion or ALB, and I discarded the
-Postgres 15 data instead of learning pg_upgrade. Invite questions.
--->
-
-- Surprise: moving tags broke more than my own code
-- Not done: bastion, ALB, `pg_upgrade` (data was recreated)
-- Open: how to wire the `.env.example` pins into compose
-
-## Demo 1: vote
-
-<!-- NOTES [4:00, 60s]
-Browser, two tabs. Open vote, cast a vote, switch to result on port
-8081 and show the count change. Say which host serves it: only the
-frontend is public. If the page is slow, go to the next step and
-come back.
--->
-
-- Tab 1: vote page (port 80), cast a vote
-- Tab 2: result page (port 8081), count changes
-
-## Demo 2: verify script
-
-<!-- NOTES [5:00, 60s]
-Second terminal, output already on screen. Point at: all units
-active, image digests match the pins, HTTP 200 on both ports, and the
-last section: a vote posted and read back from Postgres. Do NOT wait
-for the command to run live.
--->
-
-~~~{.bash}
-scripts/rg-m3-verify.sh
-~~~
-
-- Units `active` on all 3 hosts, images pinned by digest
-- End to end: vote POST -> row in Postgres
-
-## Demo 3: security evidence
-
-<!-- NOTES [6:00, 60s]
-Show three outputs: dependency versions inside the running result
-container, the Checkov summary, and the security-group table. Hide the
-admin /32. Close with: "the claims on my slides are all in this
-terminal."
--->
-
-~~~{.bash}
-podman exec result node -p ...   # proxy-addr, ws, qs versions
-checkov -d infra --framework terraform --compact --quiet
-~~~
-
-- Runtime versions = patched ones
-- Checkov: 0 failed; private tiers have no public IP
+- Terminal: nodes, workloads, image pins, HTTP 200 per path, CI runs
+- Browser: vote at `http://app.p2.ih.rolan.dog/vote/`, watch `/result/`
 
 ## Thank you
 
-<!-- NOTES [7:00, 10s]
-Thank the class and teachers. Name the repo. Then questions. After
-the talk, run the cleanup scripts: the NAT gateway bills per hour.
+<!-- NOTES [5:15, hand-over]
+Thanks. The code, the C4 diagrams and the issues are in the repo; I'm
+happy to take questions on the pipeline, the Gateway API choice, or the
+things I said I still need to learn.
+(not spoken) Stay on this slide while switching. Do NOT tear down after
+your own turn: the order is unknown. After the last presenter, run the
+teardown (check rg-down.sh --help): the EKS control plane, nodes and the
+NLB bill by the hour.
 -->
 
-**Polyglot voting app on AWS**
+**Voting app on EKS**
 
 rolandog | `github.com/rolandog/ironhack-project-1`
 
