@@ -1,0 +1,22 @@
+         o    Voter [Person]                                 o    Operator [Person]
+        /|\   Casts votes, views                            /|\   Provisions, deploys
+        / \   live results                                  / \
+         |                                                   ║
+         |  votes, views results                             ║  git push
+         |                                                   ║
+         v                                                   v
++----------------------------------+                  +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+
+| Voting App                       |                  | GitHub Actions (planned)         |
+| [Software System]                |  kubectl apply   | [External System]                |
+| Cats vs Dogs poll with           |<=================| Builds images, applies           |
+| live results                     |                  | Kubernetes manifests             |
++----------------------------------+                  +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+
+                  |                                                     ║
+                  |  runs on                                            ║  pushes images
+                  v                                                     v
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+                  +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+
+| AWS: EKS, NLB, EBS               |                  | Docker Hub                       |
+| [External System]                |   pulls images   | [External System]                |
+| Managed Kubernetes,              |----------------->| Container image                  |
+| load balancer, volumes           |                  | registry                         |
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+                  +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+

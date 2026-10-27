@@ -1,0 +1,70 @@
+<svg style="background-color:#e7e7e8" xmlns="http://www.w3.org/2000/svg" version="1.1" height="368" width="728" viewBox="0 0 728 368" class="diagram" text-anchor="middle" font-family="monospace" font-size="13px">
+<rect class="backdrop" x="0" y="0" width="728" height="368" rx="3px" ry="3px" fill="white" opacity="0.9"/>
+<path d="M 8,128 L 8,208" fill="none" stroke="black"/>
+<path d="M 8,272 L 8,352" fill="none" stroke="black"/>
+<path d="M 80,16 L 80,32" fill="none" stroke="black"/>
+<path d="M 80,64 L 80,120" fill="none" stroke="black"/>
+<path d="M 152,216 L 152,256" fill="none" stroke="black"/>
+<path d="M 288,128 L 288,208" fill="none" stroke="black"/>
+<path d="M 288,272 L 288,352" fill="none" stroke="black"/>
+<path d="M 440,128 L 440,208" fill="none" stroke="black"/>
+<path d="M 440,272 L 440,352" fill="none" stroke="black"/>
+<path d="M 496,16 L 496,32" fill="none" stroke="black"/>
+<path d="M 498,64 L 498,112" fill="none" stroke="black"/><path d="M 494,64 L 494,112" fill="none" stroke="black"/>
+<path d="M 586,224 L 586,256" fill="none" stroke="black"/><path d="M 582,224 L 582,256" fill="none" stroke="black"/>
+<path d="M 720,128 L 720,208" fill="none" stroke="black"/>
+<path d="M 720,272 L 720,352" fill="none" stroke="black"/>
+<path d="M 8,128 L 288,128" fill="none" stroke="black"/>
+<path d="M 296,174 L 432,174" fill="none" stroke="black"/><path d="M 296,178 L 432,178" fill="none" stroke="black"/>
+<path d="M 8,208 L 288,208" fill="none" stroke="black"/>
+<path d="M 296,320 L 432,320" fill="none" stroke="black"/>
+<path d="M 80,16 L 88,32" fill="none" stroke="black"/>
+<path d="M 496,16 L 504,32" fill="none" stroke="black"/>
+<path d="M 72,32 L 80,16" fill="none" stroke="black"/>
+<path d="M 488,32 L 496,16" fill="none" stroke="black"/>
+<polygon class="arrowhead" points="592,256 580,250.4 580,261.6" fill="black" transform="rotate(90,584,256)"/>
+<polygon class="arrowhead" points="504,112 492,106.4 492,117.6" fill="black" transform="rotate(90,496,112)"/>
+<polygon class="arrowhead" points="440,320 428,314.4 428,325.6" fill="black" transform="rotate(0,432,320)"/>
+<polygon class="arrowhead" points="304,176 292,170.4 292,181.6" fill="black" transform="rotate(180,296,176)"/>
+<polygon class="arrowhead" points="160,256 148,250.4 148,261.6" fill="black" transform="rotate(90,152,256)"/>
+<polygon class="arrowhead" points="88,120 76,114.4 76,125.6" fill="black" transform="rotate(90,80,120)"/>
+<circle cx="80" cy="16" r="6" class="opendot" fill="white" stroke="black"/>
+<circle cx="496" cy="16" r="6" class="opendot" fill="white" stroke="black"/>
+<g class="text">
+<text x="172" y="20">Voter [Person]</text>
+<text x="600" y="20">Operator [Person]</text>
+<text x="188" y="36">Casts votes, views</text>
+<text x="608" y="36">Provisions, deploys</text>
+<text x="80" y="52">/ \</text>
+<text x="164" y="52">live results</text>
+<text x="496" y="52">/ \</text>
+<text x="180" y="84">votes, views results</text>
+<text x="548" y="84">git push</text>
+<text x="580" y="132">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</text>
+<text x="60" y="148">Voting App</text>
+<text x="548" y="148">GitHub Actions (planned)</text>
+<text x="88" y="164">[Software System]</text>
+<text x="360" y="164">kubectl apply</text>
+<text x="520" y="164">[External System]</text>
+<text x="108" y="180">Cats vs Dogs poll with</text>
+<text x="540" y="180">Builds images, applies</text>
+<text x="68" y="196">live results</text>
+<text x="532" y="196">Kubernetes manifests</text>
+<text x="580" y="212">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</text>
+<text x="200" y="244">runs on</text>
+<text x="656" y="244">pushes images</text>
+<text x="148" y="276">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</text>
+<text x="580" y="276">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</text>
+<text x="92" y="292">AWS: EKS, NLB, EBS</text>
+<text x="492" y="292">Docker Hub</text>
+<text x="88" y="308">[External System]</text>
+<text x="364" y="308">pulls images</text>
+<text x="520" y="308">[External System]</text>
+<text x="96" y="324">Managed Kubernetes,</text>
+<text x="512" y="324">Container image</text>
+<text x="108" y="340">load balancer, volumes</text>
+<text x="484" y="340">registry</text>
+<text x="148" y="356">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</text>
+<text x="580" y="356">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</text>
+</g>
+</svg>

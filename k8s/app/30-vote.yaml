@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vote
+  namespace: rg-app
+  labels:
+    app.kubernetes.io/name: vote
+    app.kubernetes.io/part-of: rg-voting-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vote
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vote
+        app.kubernetes.io/part-of: rg-voting-app
+    spec:
+      # a Service named redis injects REDIS_PORT=tcp://..., which the apps parse as an int
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        # gunicorn binds :80 as uid 10001; this safe sysctl allows it without capabilities
+        sysctls:
+          - name: net.ipv4.ip_unprivileged_port_start
+            value: "0"
+      containers:
+        - name: vote
+          image: docker.io/rolandog/vote:0.2.0@sha256:44ac3184b13674227cad06a165096018269f31e57c5def4b667ee8608ebe2d28
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            - name: REDIS_HOST
+              value: redis
+            - name: VOTING_MODE
+              value: every-click
+          securityContext:
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vote
+  namespace: rg-app
+  labels:
+    app.kubernetes.io/name: vote
+    app.kubernetes.io/part-of: rg-voting-app
+spec:
+  selector:
+    app.kubernetes.io/name: vote
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

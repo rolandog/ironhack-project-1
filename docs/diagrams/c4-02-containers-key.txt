@@ -1,0 +1,31 @@
+  o
+ /|\    Person (user)
+ / \
+
++----------------------+
+| Application          |    Container: application
+| [container]          |
++----------------------+
+
++----------------------+
+| Data store           |
++----------------------+    Container: data store
+| [container]          |
+| (has a lid)          |
++----------------------+
+
++----------------------+
+|▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒|
+| Edge proxy           |    Container: shared edge proxy
+| [container]          |
++----------------------+
+
++======================+
+║ System boundary      ║    Software system boundary
+║                      ║
++======================+
+
+
+---------->   Runtime interaction (protocol)
+
+Shaded band = proxy. Lid line = data store.

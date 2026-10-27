@@ -1,0 +1,33 @@
+# k8s/platform/20-envoyproxy.yaml
+# 2 replicas, one per zone: the NLB uses externalTrafficPolicy Local and cross-zone
+# is off, so a zone without a ready local proxy pod is dropped from DNS
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: rg-proxy
+  namespace: rg-app
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        replicas: 2
+        pod:
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  gateway.envoyproxy.io/owning-gateway-name: rg-gw
+        container:
+          image: docker.io/envoyproxy/envoy:distroless-v1.39.5@sha256:9d84a586119a27b50437dbb01eccd4722832741539b1ed53c8e9d6da6067a6e0
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+      envoyService:
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: nlb

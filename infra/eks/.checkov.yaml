@@ -1,0 +1,21 @@
+framework:
+  - terraform
+download-external-modules: true
+quiet: true
+compact: true
+skip-check:
+  # cni ipv6 policy: count is 0 unless create_cni_ipv6_iam_policy (default false)
+  - CKV_AWS_356
+  - CKV_AWS_111
+  # node SGs are attached through the module's launch template; checkov cannot follow module outputs
+  - CKV2_AWS_5
+  # log retention: 90 days default, destroyed with the cluster; lab cost only
+  - CKV_AWS_338
+  # public API endpoint: needed from the VM; restricted by CIDR (see endpoint_public_access_cidrs)
+  - CKV_AWS_39
+  # secrets encryption is on (KMS key in the plan); module uses a dynamic block
+  - CKV_AWS_58
+  # default SG is managed by the vpc module with no rules; dynamic blocks hide that
+  - CKV2_AWS_12
+  # public API CIDR comes from api_allowed_cidrs, which has no default and rejects 0.0.0.0/0 and IPv6; checkov cannot evaluate it
+  - CKV_AWS_38
