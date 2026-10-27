@@ -90,7 +90,7 @@ fi
 tf apply -input=false "$tmp/rec.plan"
 
 zone_id=$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE_NAME" \
-  --query "HostedZones[?Name=='$ZONE_NAME.' && !Config.PrivateZone].Id | [0]" --output text)
+  --query "HostedZones[?Name=='$ZONE_NAME.' && !(Config.PrivateZone)].Id | [0]" --output text)
 [[ $zone_id != None ]] || die "public zone $ZONE_NAME not found"
 zone_id=${zone_id##*/}
 
