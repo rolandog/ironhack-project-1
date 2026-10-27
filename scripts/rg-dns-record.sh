@@ -104,22 +104,25 @@ fi
 
 # verify against the authoritative server first, so resolver caches cannot mislead
 ns=$(aws route53 get-hosted-zone --id "$zone_id" --query 'DelegationSet.NameServers[0]' --output text)
-ip=''
+ips=()
 for _ in {1..12}; do
-  ip=$(dig +short A "$FQDN" @"$ns" | head -n 1)
-  [[ -n $ip ]] && break
+  mapfile -t ips < <(dig +short A "$FQDN" @"$ns")
+  (( ${#ips[@]} > 0 )) && break
   sleep 5
 done
-[[ -n $ip ]] || die "$FQDN does not answer on $ns after 60 s"
-echo "authoritative answer on $ns: $ip"
+(( ${#ips[@]} > 0 )) || die "$FQDN does not answer on $ns after 60 s"
+echo "authoritative answers on $ns: ${ips[*]}"
 
-code=000
-for _ in {1..18}; do
-  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
-    --resolve "$FQDN:80:$ip" "http://$FQDN/vote/" 2>/dev/null || true)
-  [[ $code == 200 ]] && break
-  sleep 10
+# an NLB zone without a healthy target drops out of DNS: test every address, not the first
+for ip in "${ips[@]}"; do
+  code=000
+  for _ in {1..18}; do
+    code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+      --resolve "$FQDN:80:$ip" "http://$FQDN/vote/" 2>/dev/null || true)
+    [[ $code == 200 ]] && break
+    sleep 10
+  done
+  echo "http://$FQDN/vote/ via $ip: $code"
+  [[ $code == 200 ]] || die "expected 200 from /vote/ via $ip, got $code"
 done
-echo "http://$FQDN/vote/ via $ip: $code"
-[[ $code == 200 ]] || die "expected 200 from /vote/, got $code"
 banner "record $FQDN ready"
