@@ -147,3 +147,24 @@ module "eks" {
     }
   }
 }
+
+# CI deploy access: namespace-scoped Edit, nothing cluster-wide
+data "aws_iam_role" "ci_deploy" {
+  name = var.ci_deploy_role_name
+}
+
+resource "aws_eks_access_entry" "ci_deploy" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = data.aws_iam_role.ci_deploy.arn
+}
+
+resource "aws_eks_access_policy_association" "ci_deploy" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = aws_eks_access_entry.ci_deploy.principal_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
+
+  access_scope {
+    type       = "namespace"
+    namespaces = [var.ci_app_namespace]
+  }
+}

@@ -88,3 +88,15 @@ variable "addon_versions" {
     "eks-pod-identity-agent" = "v1.4.1-eksbuild.2"
   }
 }
+
+variable "ci_deploy_role_name" {
+  type        = string
+  description = "IAM role created by infra/ci that CI assumes to deploy; apply infra/ci first"
+  default     = "rg-p2-ci-deploy"
+}
+
+variable "ci_app_namespace" {
+  type        = string
+  description = "the only namespace the CI deploy role may edit"
+  default     = "rg-app"
+}

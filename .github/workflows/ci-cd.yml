@@ -1,0 +1,122 @@
+name: ci-cd
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  AWS_REGION: eu-central-1
+  IMAGE_PREFIX: rg-p2-
+
+jobs:
+  build:
+    # pull requests only prove that the images still build; nothing is pushed
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build images (amd64 only, no push)
+        run: |
+          scripts/rg-build-images.sh --tag="0.0.0-pr.${GITHUB_RUN_NUMBER}" --platforms=linux/amd64
+
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      vote: ${{ steps.build.outputs.vote_image_tag }}
+      result: ${{ steps.build.outputs.result_image_tag }}
+      worker: ${{ steps.build.outputs.worker_image_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Tool versions
+        run: |
+          podman --version
+          skopeo --version
+          podman build --help | grep -E -- '--(manifest|platform)\b'
+
+      - name: Install qemu-user-static for the arm64 build
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-user-static
+          if [[ ! -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]]; then
+            sudo systemctl restart systemd-binfmt
+          fi
+          test -e /proc/sys/fs/binfmt_misc/qemu-aarch64
+          head -n 3 /proc/sys/fs/binfmt_misc/qemu-aarch64
+
+      - name: Compute the image tag
+        id: tag
+        run: |
+          ver=$(<VERSION)
+          if [[ $GITHUB_REF_NAME == main ]]; then
+            tag=$ver
+          else
+            tag=$ver-dev.$GITHUB_RUN_NUMBER
+          fi
+          printf 'image tag: %s\n' "$tag"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Show the OIDC claims GitHub will send
+        continue-on-error: true
+        run: |
+          tok=$(curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          p=$(cut -d. -f2 <<<"$tok" | tr '_-' '/+')
+          while (( ${#p} % 4 )); do p+==; done
+          base64 -d <<<"$p" | jq '{sub, aud, ref}'
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.RG_P2_PUSH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR with podman
+        env:
+          REGISTRY: ${{ vars.RG_P2_ECR_REGISTRY }}
+        run: |
+          echo "REGISTRY_AUTH_FILE=$RUNNER_TEMP/containers-auth.json" >> "$GITHUB_ENV"
+          export REGISTRY_AUTH_FILE=$RUNNER_TEMP/containers-auth.json
+          aws ecr get-login-password --region "$AWS_REGION" |
+            podman login --username AWS --password-stdin "$REGISTRY"
+
+      - name: Build, push and verify
+        id: build
+        env:
+          REGISTRY: ${{ vars.RG_P2_ECR_REGISTRY }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          scripts/rg-build-images.sh --registry="$REGISTRY" --prefix="$IMAGE_PREFIX" \
+            --tag="$TAG" --push --resume | tee "$RUNNER_TEMP/pins.env"
+          sed -E 's/^([A-Z_]+)=/\L\1=/' "$RUNNER_TEMP/pins.env" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Published images'
+            echo '```text'
+            cat "$RUNNER_TEMP/pins.env"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove registry credentials
+        if: always()
+        run: |
+          [[ -z ${REGISTRY_AUTH_FILE:-} ]] || rm -f -- "$REGISTRY_AUTH_FILE"
